@@ -1,0 +1,38 @@
+{
+	"name": "obsidian-wikijs-publish",
+	"version": "0.0.4",
+	"description": "Obsidian plugin for easy publish to wikijs with a single click.",
+	"main": "src/main.ts",
+	"scripts": {
+		"preinstall": "npx only-allow pnpm",
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [],
+	"author": {
+		"name": "trinidz",
+		"email": "nostr@npub15ucds95a8m2whgj4esll39lhxta5jwk8lqvmtz6ne8lf8ksmggrqz74dq7.nostr",
+		"url": "https://github.com/trinidz/obsidian-to-ghost"
+	},
+	"license": "MIT",
+	"devDependencies": {
+		"@types/jsonwebtoken": "^9.0.2",
+		"@types/markdown-it": "^12.2.3",
+		"@types/node": "^17.0.45",
+		"@typescript-eslint/eslint-plugin": "^5.62.0",
+		"@typescript-eslint/parser": "^5.62.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "0.14.43",
+		"gray-matter": "^4.0.3",
+		"jsonwebtoken": "^9.0.1",
+		"markdown-it": "^13.0.1",
+		"obsidian": "^1.4.4",
+		"tslib": "2.4.0",
+		"typescript": "4.7.3"
+	},
+	"dependencies": {
+		"pnpm": "^9.7.1"
+	},
+	"packageManager": "pnpm@9.7.1+sha512.faf344af2d6ca65c4c5c8c2224ea77a81a5e8859cbc4e06b1511ddce2f0151512431dd19e6aff31f2c6a8f5f2aced9bd2273e1fed7dd4de1868984059d2c4247"
+}
