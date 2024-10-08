@@ -5,7 +5,7 @@
 ## Usage
 
 ### Authentication
-Obsidian-to-Wikijs requires a valid API key to send to a Wikijs instance. To generate an API key, login to Wikijs as an administrator and go to the Administration area (Administration > API Access). The API key will be a very long (about 500 characters) string of random characters. Because Obsidian plugins [can't store sensitive information securely](https://forum.obsidian.md/t/a-place-for-plugins-sensitive-data/18308), you should use an API key with permission to read and write pages of your specific account.
+Obsidian-to-Wikijs requires a valid Wikijs API key to enable sending Obsidian notes to a Wikijs instance. To generate an API key, login to your Wikijs instance as an administrator and go to the Administration area (Administration > API Access). The API key will be a very long (about 500 characters) string of random characters. Because Obsidian plugins [can't store sensitive information securely](https://forum.obsidian.md/t/a-place-for-plugins-sensitive-data/18308), the API key should at least have the permission to read and write pages of your specific Wikijs account.
 
 ### Plugin Setup
 
