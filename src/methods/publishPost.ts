@@ -52,7 +52,13 @@ export const publishPost = async (view: MarkdownView, settings: SettingsProp) =>
 			locale: metaMatter?.locale || "en",
 		};
 
-		const content_filtered = (<DataProp>data).content
+
+		let content_reconfig = configCalloutContent((<DataProp>data).content)
+
+		const content_filtered = content_reconfig
+			.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
+			.replace(/^ {0,3}> ?\[\!warning\]/gmi,"> {.is-warning}")
+			.replace(/^ {0,3}> ?\[\!danger\]/gmi,"> {.is-danger}")
 			.replace(/\\/g, "/")
 			.replace(/\"/g, "'")
 			.replace(/\n/g, "\\n")
