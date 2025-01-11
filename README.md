@@ -41,14 +41,19 @@ When you add the front matter to your Obsidian note the uuid should be automatic
 
 This plugin uses PNPM for dependency management.
 
--   Clone the repository.
--   Run `pnpm i` to install the necessary dependencies
--   Run `pnpm dev` to automaticlly recompile as the project files change.
+- Clone the repository.
+- Run `pnpm i` to install the necessary dependencies
+- Run `pnpm dev` to automaticlly recompile as the project files change.
 
 ## Manual installation
 
--   Run `pnpm build`
--   Copy `main.js` and `manifest.json` to `VaultFolder/.obsidian/plugins/send-to-wikijs/` where `Vaultfolder` is the location of your Obsidian vault.
+- Run `pnpm build`
+- Copy `main.js` and `manifest.json` to `VaultFolder/.obsidian/plugins/send-to-wikijs/` where `Vaultfolder` is the location of your Obsidian vault.
+
+## Release installation
+
+- Download a [release](https://github.com/trinidz/obsidian-to-wikijs/releases)
+- Copy `main.js` and `manifest.json` to `VaultFolder/.obsidian/plugins/send-to-wikijs/` where `Vaultfolder` is the location of your Obsidian vault.
 
 ## Issues & Support
 
