@@ -145,51 +145,59 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 }
 
 const configCalloutContent = (content: string): string => {
-	const callouts_line_nums: number[] = []
-    let searchType = -1 
+	const calloutTagLineNums: number[] = []
+    let calloutTagType = -1 
 	const input_lines = content.split('\n')
 	const output_lines = content.split('\n')
 	let obsidMainTagIndex = 0
 	let wikiMainTagIndex = 0
 
-	console.log("\ninput_lines:\n" + input_lines)
+	//console.log("\ninput_lines:\n" + input_lines)
 
 	input_lines.forEach((element, i, localArr) => {
 		element += '\n'
 		output_lines[i] += '\n'
-		callouts_line_nums.push(searchType)
+		calloutTagLineNums.push(calloutTagType)
 
-		if (searchType == -1) {
+		if (calloutTagType == -1) {
 			var found = element.search(/^ {0,3}> ?\[\!info\][ ]*[\n]|^ {0,3}> ?\[\!warning\][ ]*[\n]|^ {0,3}> ?\[\!danger\][ ]*[\n]/i)
 			if (found != -1){
 				if ( i == 0 || (i > 0 && localArr[i-1].search(/^ *>/i) == -1) ) {
 					//console.log('Ind:' + i + ' Main Tag: ' + element)
 					obsidMainTagIndex = i
-					searchType = -2
+					calloutTagType = -2
 
 					if(localArr.length - 1 == i ){
-						callouts_line_nums[i] = i
+						calloutTagLineNums[i] = i
 					}
 				}
 			}
-		} else if (searchType == -2){
+		} else if (calloutTagType == -2){
 			if ( localArr[i].search(/^ *>/i) != -1 ){
 				//console.log('Ind:' + i + ' Sub Tag: '+ element)
 			} else {
 				wikiMainTagIndex = i-1
-				callouts_line_nums[obsidMainTagIndex] = wikiMainTagIndex
+				calloutTagLineNums[obsidMainTagIndex] = wikiMainTagIndex
 				
-				searchType = -1
+				calloutTagType = -1
 				obsidMainTagIndex = 0
 				wikiMainTagIndex = 0
 			}
 		}
 	});
 
+	let calloutTagsExist = calloutTagLineNums.some((val)=>{
+		return val >= 0
+	})
+
+	if (!calloutTagsExist){
+		return content
+	}
+
 	let captured_tag: string
 	let new_content:string
-	callouts_line_nums.forEach((element, indx)=>{
-		if (element > 0) {
+	calloutTagLineNums.forEach((element, indx)=>{
+		if (element >= 0) {
 			captured_tag = output_lines.splice(indx,1)[0]
 			output_lines.splice(element,0,captured_tag)
 		}
@@ -203,7 +211,6 @@ const configCalloutContent = (content: string): string => {
 		}
 	})
 
-	//console.log("CalloutNums: ",callouts_line_nums)
 	//console.log("\noutput lines:\n ",output_lines)
 	//console.log('\nNewContent:\n ' + new_content)
 	return new_content
