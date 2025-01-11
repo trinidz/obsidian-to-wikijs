@@ -52,7 +52,13 @@ export const publishPost = async (view: MarkdownView, settings: SettingsProp) =>
 			locale: metaMatter?.locale || "en",
 		};
 
-		const content_filtered = (<DataProp>data).content
+
+		let content_reconfig = configCalloutContent((<DataProp>data).content)
+
+		const content_filtered = content_reconfig
+			.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
+			.replace(/^ {0,3}> ?\[\!warning\]/gmi,"> {.is-warning}")
+			.replace(/^ {0,3}> ?\[\!danger\]/gmi,"> {.is-danger}")
 			.replace(/\\/g, "/")
 			.replace(/\"/g, "'")
 			.replace(/\n/g, "\\n")
@@ -136,4 +142,76 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 		new Notice(`wikiPostExists error: ${error.name}: ${error.message}`)
 	}
 	return noteId;
+}
+
+const configCalloutContent = (content: string): string => {
+	const calloutTagLineNums: number[] = []
+    let calloutTagType = -1 
+	const input_lines = content.split('\n')
+	const output_lines = content.split('\n')
+	let obsidMainTagIndex = 0
+	let wikiMainTagIndex = 0
+
+	//console.log("\ninput_lines:\n" + input_lines)
+
+	input_lines.forEach((element, i, localArr) => {
+		element += '\n'
+		output_lines[i] += '\n'
+		calloutTagLineNums.push(calloutTagType)
+
+		if (calloutTagType == -1) {
+			var found = element.search(/^ {0,3}> ?\[\!info\][ ]*[\n]|^ {0,3}> ?\[\!warning\][ ]*[\n]|^ {0,3}> ?\[\!danger\][ ]*[\n]/i)
+			if (found != -1){
+				if ( i == 0 || (i > 0 && localArr[i-1].search(/^ *>/i) == -1) ) {
+					//console.log('Ind:' + i + ' Main Tag: ' + element)
+					obsidMainTagIndex = i
+					calloutTagType = -2
+
+					if(localArr.length - 1 == i ){
+						calloutTagLineNums[i] = i
+					}
+				}
+			}
+		} else if (calloutTagType == -2){
+			if ( localArr[i].search(/^ *>/i) != -1 ){
+				//console.log('Ind:' + i + ' Sub Tag: '+ element)
+			} else {
+				wikiMainTagIndex = i-1
+				calloutTagLineNums[obsidMainTagIndex] = wikiMainTagIndex
+				
+				calloutTagType = -1
+				obsidMainTagIndex = 0
+				wikiMainTagIndex = 0
+			}
+		}
+	});
+
+	let calloutTagsExist = calloutTagLineNums.some((val)=>{
+		return val >= 0
+	})
+
+	if (!calloutTagsExist){
+		return content
+	}
+
+	let captured_tag: string
+	let new_content:string
+	calloutTagLineNums.forEach((element, indx)=>{
+		if (element >= 0) {
+			captured_tag = output_lines.splice(indx,1)[0]
+			output_lines.splice(element,0,captured_tag)
+		}
+	})
+
+	output_lines.forEach((ele, indx)=>{
+		if(indx == 0) { 
+			new_content = ele 
+		} else {
+			new_content += ele
+		}
+	})
+
+	//console.log("\noutput lines:\n ",output_lines)
+	//console.log('\nNewContent:\n ' + new_content)
+	return new_content
 }
