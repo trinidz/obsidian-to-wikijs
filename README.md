@@ -32,10 +32,17 @@ uuid: "{{date:x}}" # Do not change
 ---
 ```
 
-When you add the front matter to your Obsidian note the uuid should be automatically generated.  The uuid uses a very accurate timestamp. The uuid is used by the plugin to identify and access the notes once they are posted on Wikijs.  Once the plugin setup is complete, and you have added the front matter to your note, you can click the upload "Send to Wikijs" icon in the ribbon menu on the left to send the currently open note to Wikijs.
+When you add the front matter to your Obsidian note the uuid should be automatically generated.  The uuid is a very accurate timestamp. The uuid is used by the plugin to identify and access the notes posted on Wikijs.  Once the plugin setup is complete, and you have added the front matter to your note, you can click the upload "Send to Wikijs" icon in the ribbon menu on the left to send the currently open note to Wikijs.
 
 - The front matter fields listed as (Optional) can be left empty or with the default value as shown.
 - To delete a note from your Wikijs instance, add the tag 'delete' to the tags field in the front matter, then click the upload icon in the ribbon menu. 
+
+### Screenshots
+- example obsidian note
+![obsidian example screenshot](examples/obsidian-screenshot.png)
+
+- example obsidian-to-wikijs post
+![wikijs example screenshot](examples/wikijs-screenshot.png)
 
 ## Development
 
