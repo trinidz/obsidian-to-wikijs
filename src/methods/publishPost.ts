@@ -1,9 +1,13 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { SettingsProp, DataProp } from "./../types/index";
-import { MarkdownView, Notice, requestUrl, RequestUrlParam } from "obsidian";
+import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault } from "obsidian";
 
 const matter = require("gray-matter");
-const UUID_TAG_HDR = "o2w-"
+const UUID_TAG_HDR = "o2w-";
+
+//https://github.com/alangrainger/share-note/blob/main/src/note.ts
+//const formData = new FormData();
+//formData.append('mediaUpload','')
 
 let wikijsReq: RequestUrlParam = {
 	url: "",
@@ -18,10 +22,10 @@ let wikijsReq: RequestUrlParam = {
 		"Accept-Encoding": "gzip, deflate, br",
 		//"Origin": "https://wiki.example.org",
 	},
-	body:""
+	body: ""
 }
 
-export const publishPost = async (view: MarkdownView, settings: SettingsProp) => {
+export const publishPost = async (view: MarkdownView, vaul: Vault ,settings: SettingsProp) => {
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
 
@@ -52,6 +56,7 @@ export const publishPost = async (view: MarkdownView, settings: SettingsProp) =>
 			locale: metaMatter?.locale || "en",
 		};
 
+        getImages((<DataProp>data).content, vaul)
 
 		let content_reconfig = configCalloutContent((<DataProp>data).content)
 
@@ -215,3 +220,65 @@ const configCalloutContent = (content: string): string => {
 	//console.log('\nNewContent:\n ' + new_content)
 	return new_content
 }
+
+const getImages = async ( content: string, myv: Vault): Promise<string> => {
+    const input_lines = content.split('\n');
+    
+	let vaultTfiles = myv.getFiles()
+    //console.log('\nvfilesLength :' + vaultTfiles.length) 
+	vaultTfiles.forEach(element => {
+		if (element.extension == "png"){
+			myv.readBinary(element)
+		    console.log('\nname : ' + element.name + ' size: ' + element.stat.size + 'path: ' + element.path + 'ext: ' + element.extension )
+		}
+	});
+
+    for (const ln of input_lines) {
+		var found = ln.search(/^ {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i);
+		
+		if (found == -1) {
+			continue
+		}
+      
+		//check if is a web image
+        if ( ln.match(/\]\(https?:\/\/[\w/.-]+\)/) && !ln.match(/\]\(https?:\/\/localhost\/\)/) ) {
+			console.log('\nweb img: ' + ln);
+			continue
+	    }
+
+		// let content
+		// let picname = ln.split('(')
+		// picname = picname[1].split(')')
+        // try {
+        //     const res = await fetch(picname[0])
+        //   if (res && res.status === 200) {
+        //     content = await res.arrayBuffer()
+		// 	console.log('\nFile name: ' + picname[0] + 'file size: ' +  content.byteLength);
+        //   }
+        // } catch (e) {
+        //   // Unable to process this file
+		//   console.log('\nUnable to process file: ' + e + 'E ' + picname[0]);
+        //   continue
+        // }
+
+	    console.log('\nlocal img: ' + ln);
+	}
+    
+	return input_lines[0]
+
+// ![hello](/kk8k/.k/k)
+// ![hello](_resources/AllClients-1.png)
+// ![123](_resources/AllClients-1.png)
+// [hellP](_resources/AllClients-1.png)
+// ![](_resources/AllClients-1.png)
+// ![hello](https://pages.expat.com)
+// ![hello](http://pages.expat.com)
+// ![hello](http://localhost/)
+// ![hello](http://localhost)
+//     ![hello](_resources/AllClients-1.png)
+// ! [spaceAfterExclmation](kk8k)
+// ![hello]()
+// ![AfterExclamation] (spaceAfter])
+// ![hello](/_kk8k/.k/k)
+}
+

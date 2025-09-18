@@ -11,7 +11,7 @@ export default class WikijsPublish extends Plugin {
 		await this.loadSettings();
 
 		// 2 ways to publish:
-		// 1. Click on the ghost icon on the left
+		// 1. Click on the upload icon on the left
 		this.addRibbonIcon("upload", "Send To Wikijs", () => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!view) {
@@ -20,7 +20,7 @@ export default class WikijsPublish extends Plugin {
 				);
 				return;
 			}
-			publishPost(view, this.settings);
+			publishPost(view, this.app.vault, this.settings);
 		});
 
 		// 2. Run the by command + P
@@ -34,7 +34,7 @@ export default class WikijsPublish extends Plugin {
 					);
 					return;
 				}
-				publishPost(view, this.settings);
+				publishPost(view,this.app.vault, this.settings);
 			},
 
 			},
