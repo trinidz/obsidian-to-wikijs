@@ -221,20 +221,12 @@ const configCalloutContent = (content: string): string => {
 	return new_content
 }
 
-const getImages = async ( content: string, myv: Vault): Promise<string> => {
-    const input_lines = content.split('\n');
+const getImages = ( content: string, vlt: Vault): string => {
+    const re_imgLink = / {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find img hyperlinks
+	const contentLines = content.split('\n');
     
-	let vaultTfiles = myv.getFiles()
-    //console.log('\nvfilesLength :' + vaultTfiles.length) 
-	vaultTfiles.forEach(element => {
-		if (element.extension == "png"){
-			myv.readBinary(element)
-		    console.log('\nname : ' + element.name + ' size: ' + element.stat.size + 'path: ' + element.path + 'ext: ' + element.extension )
-		}
-	});
-
-    for (const ln of input_lines) {
-		var found = ln.search(/^ {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i);
+    for (const ln of contentLines) {
+		var found = ln.search(re_imgLink);
 		
 		if (found == -1) {
 			continue
@@ -242,29 +234,31 @@ const getImages = async ( content: string, myv: Vault): Promise<string> => {
       
 		//check if is a web image
         if ( ln.match(/\]\(https?:\/\/[\w/.-]+\)/) && !ln.match(/\]\(https?:\/\/localhost\/\)/) ) {
-			console.log('\nweb img: ' + ln);
+			//console.log('\nweb img: ' + ln);
 			continue
 	    }
+		console.log('\nlocal img: ' + ln);
 
-		// let content
-		// let picname = ln.split('(')
-		// picname = picname[1].split(')')
-        // try {
-        //     const res = await fetch(picname[0])
-        //   if (res && res.status === 200) {
-        //     content = await res.arrayBuffer()
-		// 	console.log('\nFile name: ' + picname[0] + 'file size: ' +  content.byteLength);
-        //   }
-        // } catch (e) {
-        //   // Unable to process this file
-		//   console.log('\nUnable to process file: ' + e + 'E ' + picname[0]);
-        //   continue
-        // }
+		let imgLink = ln.split(/\]\(/)
+		let imgPath = imgLink[1].split(')')[0]
+		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
+		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
 
-	    console.log('\nlocal img: ' + ln);
+		//console.log('\nimgFname: ' + imgFname) 
+		//console.log('\nimgExt: ' + imgExt) 
+		//console.log('\nvfilesLength :' + vaultTfiles.length) 
+
+	    for (const vltFile of vlt.getFiles()) {
+			//console.log('\nimgFname: ' + imgFname + ' vltFileName: ' + vltFile.name ) 
+		    if(imgFname == vltFile.name){
+			  vlt.readBinary(vltFile)
+		      console.log('\nvltFilename: ' + vltFile.name + ' size: ' + vltFile.stat.size + ' path: ' + vltFile.path + ' ext: ' + vltFile.extension )
+			  break;
+		    }
+	    };
 	}
     
-	return input_lines[0]
+	return contentLines[0]
 
 // ![hello](/kk8k/.k/k)
 // ![hello](_resources/AllClients-1.png)
