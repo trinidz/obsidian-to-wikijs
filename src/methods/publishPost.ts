@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { SettingsProp, DataProp } from "./../types/index";
+import { SettingsProp, DataProp, IMG_TYPES } from "./../types/index";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault } from "obsidian";
 
 const matter = require("gray-matter");
@@ -221,8 +221,9 @@ const configCalloutContent = (content: string): string => {
 	return new_content
 }
 
-const getImages = ( content: string, vlt: Vault): string => {
+const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> => {
     const re_imgLink = / {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find img hyperlinks
+	let imgBinaries: ArrayBuffer[] = new Array()
 	const contentLines = content.split('\n');
     
     for (const ln of contentLines) {
@@ -243,22 +244,29 @@ const getImages = ( content: string, vlt: Vault): string => {
 		let imgPath = imgLink[1].split(')')[0]
 		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
 		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+  
+		if (!IMG_TYPES.some(ele => {
+			//console.log('\nbool: ' + ele === imgExt) 
+			//console.log('\nExts: ' + imgExt + '===' + ele) 
+			return ele === imgExt
+		}))
+			continue
 
 		//console.log('\nimgFname: ' + imgFname) 
-		//console.log('\nimgExt: ' + imgExt) 
 		//console.log('\nvfilesLength :' + vaultTfiles.length) 
 
 	    for (const vltFile of vlt.getFiles()) {
 			//console.log('\nimgFname: ' + imgFname + ' vltFileName: ' + vltFile.name ) 
-		    if(imgFname == vltFile.name){
-			  vlt.readBinary(vltFile)
+		    if(imgFname === vltFile.name){
+			  imgBinaries.push(await vlt.readBinary(vltFile))
+			  console.log('\nimgBinariesLength: ' + imgBinaries[imgBinaries.length-1].byteLength + ' arraylength: ' + imgBinaries.length )
 		      console.log('\nvltFilename: ' + vltFile.name + ' size: ' + vltFile.stat.size + ' path: ' + vltFile.path + ' ext: ' + vltFile.extension )
 			  break;
 		    }
 	    };
 	}
     
-	return contentLines[0]
+	return imgBinaries
 
 // ![hello](/kk8k/.k/k)
 // ![hello](_resources/AllClients-1.png)
@@ -275,4 +283,6 @@ const getImages = ( content: string, vlt: Vault): string => {
 // ![AfterExclamation] (spaceAfter])
 // ![hello](/_kk8k/.k/k)
 }
+
+
 
