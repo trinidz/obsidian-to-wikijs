@@ -12,4 +12,4 @@ export interface DataProp {
 	content: string;
 }
 
-export const IMG_TYPES = ["jpg", "jpeg", "png", "bmp", "svg"]
+export const IMG_WHITELIST = ["jpg", "jpeg", "png", "bmp", "svg"]
