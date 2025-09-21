@@ -5,11 +5,6 @@ import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayB
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
 
-//https://github.com/alangrainger/share-note/blob/main/src/note.ts
-//https://github.com/requarks/wiki/discussions/6049
-//const formData = new FormData();
-//formData.append('mediaUpload','')
-
 let wikijsReq: RequestUrlParam = {
 	url: "",
 	method: "POST",
@@ -59,11 +54,8 @@ export const publishPost = async (view: MarkdownView, vaul: Vault ,settings: Set
 
         ///TESTING START 
         //let imgArr = await getImages((<DataProp>data).content, vaul)
-		//uploadImages(imgArr, settings)
-		uploadStuff(view,vaul,settings) 
-		return
+		uploadImages(view,vaul,settings) 
         ///TESTING END
-
 
 		let content_reconfig = configCalloutContent((<DataProp>data).content)
 
@@ -291,175 +283,79 @@ const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> =
 // ![hello](/_kk8k/.k/k)
 }
 
-const uploadImages = async(imgBinaries: ArrayBuffer[], settings: SettingsProp) => {
+//https://github.com/alangrainger/share-note/blob/main/src/note.ts
+//https://github.com/requarks/wiki/discussions/6049
 //https://github.com/djmango/obsidian-transcription/blob/cf5029b7f9aca97396a3befa2f963f15c87fabca/main.ts
-    const imgBlob = new Blob([imgBinaries[0]], { type: 'application/octet-stream' });
-	const formData = new FormData();
-    formData.append('mediaUpload', JSON.stringify({ folderId: 0 }));
-    formData.append('mediaUpload', imgBlob ); 
+const uploadImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
+	// Get the current filepath
+	const markdownFilePath = view.file.path;
+	console.log('\nSearching image files in vault : ' + markdownFilePath);
 
-	// let wikijsAssetsReq: RequestUrlParam = {
-	// 	url: `${settings.url}/u`, 
-	// 	method: "POST",
-	// 	contentType: "multipart/form-data",
-	// 	headers: {
-	// 		"Authorization": `Bearer ${settings.adminToken}`,
-	// 		"Content-Type": "multipart/form-data",
-	// 		//"Accept": "application/json",
-	// 		"Connection": "keep-alive",
-	// 		"DNT": "1",
-	// 		//"Access-Control-Allow-Methods": "POST",
-	// 		//"Accept-Encoding": "gzip, deflate, br",
-	// 		//"Origin": "https://wiki.example.org",
-	// 	},
-	// 	body: imgBinaries[0]
-	// }
+	// Get all linked files in the markdown file
+	const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
+	console.log('\nimagesLinked: ' + filesLinked)
 
-	// try {
-	// 	const result = await requestUrl(wikijsAssetsReq)
-	// 	const json = result.json;
-	// 	console.log(json)
-	// 	// if (json?.data.pages?.list) {
-	// 	// 	if (json.data.pages.list.length >= 1) {
-	// 	// 		noteId = json.data.pages.list[0].id;
-	// 	// 	}
-	// 	// } else {
-	// 	// 	new Notice("Image not uploaded!")
-	// 	// }
-	// } catch (error: any) {
-	// 	console.log("img upload error: " + error)
-	// 	//new Notice(`wikiPostExists error: ${error.name}: ${error.message}`)
-	// }
-	// //return noteId;
+	// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions we want to transcribe
+	const imagesToUpload: TAbstractFile[] = [];
+	for (const linkedFilePath of filesLinked) {
+		const linkedFileExtension = linkedFilePath.split('.').pop();
+		if (linkedFileExtension === undefined || (!IMG_WHITELIST.some(ele => ele === linkedFileExtension))) {
+			console.log('Skipping ' + linkedFilePath + ' because the file extension is not in the list of transcribeable file extensions');
+			continue;
+		}
 
-	try {
-		const result = await fetch(`${settings.url}/u`, {
-			method: 'POST',
-			//mode: 'no-cors',
-			headers: {
-				'Authorization': `Bearer ${settings.adminToken}`,
-				"Connection": "keep-alive",
-		        "DNT": "1",
-				"Access-Control-Allow-Origin": "*",
-				"Access-Control-Allow-Methods": "POST",
-			},
-			body: formData
-		})
-		const json = result.json;
-		console.log(json)
-	} catch (error: any) {
-		console.log("img upload Error: " + error)
-		//new Notice(`wikiPostExists error: ${error.name}: ${error.message}`)
+		// We now know that the file extension is in the list of transcribeable file extensions
+		const linkedFile = vlt.getAbstractFileByPath(linkedFilePath);
+
+		// If the file is not found, we skip it
+		if (linkedFile === null) {
+			console.log('Could not find file ' + linkedFilePath);
+			continue;
+		}
+		imagesToUpload.push(linkedFile)
 	}
+	// Now that we have all the files to transcribe, we can transcribe them
+	for (const fileToTranscribe of imagesToUpload) {
+		console.log('Uploading ' + fileToTranscribe.path);
 
-// fetch('http://your.wiki.com/u', {
-//   method: 'POST',
-//   headers: {
-//     'Authorization': 'Bearer API_KEY'
-//   },
-//   body: formData
-// })
-// .then(response => response.json())
-// .then(data => console.log(data))
-// .catch(error => console.error('Error:', error));
+		// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
+		// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
+		// I believe this to be equivilent to the following curl command: curl --location --request POST 'http://djmango-bruh:9000/asr?task=transcribe&language=en' --form 'audio_file=@"test-vault/02 Files/Recording.webm"'
 
-// import requests
+		// Generate the form data payload boundry string, it can be arbitrary, I'm just using a random string here
+		// https://stackoverflow.com/questions/3508338/what-is-the-boundary-in-multipart-form-data
+		// https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
+		const N = 16 // The length of our random boundry string
+		const randomBoundryString = "djmangoBoundry" + Array(N + 1).join((Math.random().toString(36) + '00000000000000000').slice(2, 18)).slice(0, N)
 
-// upload_data = (
-//     ('mediaUpload', (None, '{"folderId":0}')),
-//     ('mediaUpload', ('image.jpg', open('image.jpg', 'rb'), 'image/jpeg'))
-// )
+		// Construct the form data payload as a string
+		const form_data_payload_00 = `------${randomBoundryString}\r\nContent-Disposition: form-data; name=mediaUpload\r\n\r\n${JSON.stringify({ folderId: 0 })}`;
+		const form_data_payload_01 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename=${fileToTranscribe.name}\r\nContent-Type: image/jpeg\r\n\r\n`
+		const form_data_payload_end = `\r\n------${randomBoundryString}--`
 
-// response = requests.post('http://your.wiki.com/u',
-//         headers={'Authorization' : 'Bearer API_KEY'},
-//         files=upload_data)
+		// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
+		const form_data_payload_encoded_00 = new TextEncoder().encode(form_data_payload_00);
+		const form_data_payload_encoded_01 = new TextEncoder().encode(form_data_payload_01);
+		const data = new Blob([await vlt.adapter.readBinary(fileToTranscribe.path)]);
+		const form_data_payload_encoded_end = new TextEncoder().encode(form_data_payload_end);
+		const concatenated = await new Blob([form_data_payload_encoded_00, form_data_payload_encoded_01, await getBlobArrayBuffer(data), form_data_payload_encoded_end]).arrayBuffer()
 
-// print(response.content)
+		// Now that we have the form data payload as an array buffer, we can pass it to requestURL
+		// We also need to set the content type to multipart/form-data and pass in the boundry string
+		const options: RequestUrlParam = {
+			method: 'POST',
+			url: `${settings.url}/u`,
+			contentType: `multipart/form-data; boundary=----${randomBoundryString}`,
+			headers: {
+				"Authorization": `Bearer ${settings.adminToken}`,
+			},
+			body: concatenated
+		};
 
-// curl.exe 'http://your.wiki.com/u' \
-// 	-H 'Authorization: Bearer API_KEY' \
-// 	-F 'mediaUpload={/"folderId/":0}' \
-// 	-F 'mediaUpload=@image.jpg'
+		requestUrl(options)
+			.then(response => console.log(response))
+			//{"succeeded":false,"message":"Missing upload folder metadata."}
+			//.then(data => console.log('jsonData: ' + data))
+			.catch(error => console.error('requestUrlError: ' + error));
+	}
 }
-
-const uploadStuff = async ( view: MarkdownView, vaul: Vault, settings: SettingsProp  ) => {
-				// Get the current filepath
-				const markdownFilePath = view.file.path;
-				console.log('\nSearching image files in vault : ' + markdownFilePath);
-
-				// Get all linked files in the markdown file
-				const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
-				console.log('\nimagesLinked: ' + filesLinked)
-
-				// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions we want to transcribe
-				const filesToTranscribe: TAbstractFile[] = [];
-				for (const linkedFilePath of filesLinked) {
-					const linkedFileExtension = linkedFilePath.split('.').pop();
-					if (linkedFileExtension === undefined || (!IMG_WHITELIST.some(ele => ele === linkedFileExtension))){
-						console.log('Skipping ' + linkedFilePath + ' because the file extension is not in the list of transcribeable file extensions');
-						continue;
-					}
-
-					// We now know that the file extension is in the list of transcribeable file extensions
-					const linkedFile = vaul.getAbstractFileByPath(linkedFilePath);
-
-					// If the file is not found, we skip it
-					if (linkedFile === null) {
-						console.log('Could not find file ' + linkedFilePath);
-						continue;
-					}
-					filesToTranscribe.push(linkedFile)
-				}
-				// Now that we have all the files to transcribe, we can transcribe them
-				for (const fileToTranscribe of filesToTranscribe) {
-					console.log('Uploading ' + fileToTranscribe.path);
-
-					// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
-					// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
-					// I believe this to be equivilent to the following curl command: curl --location --request POST 'http://djmango-bruh:9000/asr?task=transcribe&language=en' --form 'audio_file=@"test-vault/02 Files/Recording.webm"'
-					
-					// Generate the form data payload boundry string, it can be arbitrary, I'm just using a random string here
-					// https://stackoverflow.com/questions/3508338/what-is-the-boundary-in-multipart-form-data
-					// https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
-					const N = 16 // The length of our random boundry string
-					const randomBoundryString = "djmangoBoundry" + Array(N+1).join((Math.random().toString(36)+'00000000000000000').slice(2, 18)).slice(0, N) 
-					
-					// Construct the form data payload as a string
-					//const pre_string = `------${randomBoundryString}\r\nContent-Disposition: form-data; mediaUpload=${JSON.stringify({ folderId: 0 })}; mediaUpload="blossom.png"\r\nContent-Type: "image/jpeg"\r\n\r\n`;
-					const pre_string = `------${randomBoundryString}\r\nContent-Disposition: form-data; name=mediaUpload\r\n\r\n${JSON.stringify({ folderId: 0 })}`;
-					//const pre_string2 = `------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename="blossom.png"\r\nContent-Type: image/jpeg\r\n\r\n`
-					const pre_string2 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename="blossom.png"\r\nContent-Type: image/jpeg\r\n\r\n`
-					const post_string = `\r\n------${randomBoundryString}--`
-
-					// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
-					const pre_string_encoded = new TextEncoder().encode(pre_string);
-					const pre_string2_encoded = new TextEncoder().encode(pre_string2);
-					const data = new Blob([await vaul.adapter.readBinary(fileToTranscribe.path)]);
-					const post_string_encoded = new TextEncoder().encode(post_string);
-					const concatenated = await new Blob([pre_string_encoded, pre_string2_encoded,await getBlobArrayBuffer(data), post_string_encoded]).arrayBuffer()
-
-					// Now that we have the form data payload as an array buffer, we can pass it to requestURL
-					// We also need to set the content type to multipart/form-data and pass in the boundry string
-					const options: RequestUrlParam = {
-						method: 'POST',
-						url: `${settings.url}/u`,
-						contentType: `multipart/form-data; boundary=----${randomBoundryString}`,
-						headers: {
-							"Authorization": `Bearer ${settings.adminToken}`,
-			                //"Content-Type": "multipart/form-data",
-			                //"Accept": "application/json",
-			                //"Connection": "keep-alive",
-			                //"DNT": "1",
-			                //"Access-Control-Allow-Methods": "POST",
-			                //"Accept-Encoding": "gzip, deflate, br",
-			                //"Origin": "https://wiki.example.org",
-							},
-						body: concatenated
-					};
-
-					requestUrl(options)
-					  .then(response => response.json())
-					  .then(data => console.log('jsonData: ' + data)) 
-					  .catch(error => console.error('requestUrlError: ' + error));
-				}
-			}
