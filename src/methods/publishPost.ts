@@ -60,8 +60,10 @@ export const publishPost = async (view: MarkdownView, vaul: Vault ,settings: Set
         ///TESTING START 
         //let imgArr = await getImages((<DataProp>data).content, vaul)
 		//uploadImages(imgArr, settings)
-		uploadStuff(view,vaul,settings)
+		uploadStuff(view,vaul,settings) 
+		return
         ///TESTING END
+
 
 		let content_reconfig = configCalloutContent((<DataProp>data).content)
 
@@ -387,7 +389,7 @@ const uploadStuff = async ( view: MarkdownView, vaul: Vault, settings: SettingsP
 
 				// Get all linked files in the markdown file
 				const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
-				console.log('\nfilesLinked: ' + filesLinked)
+				console.log('\nimagesLinked: ' + filesLinked)
 
 				// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions we want to transcribe
 				const filesToTranscribe: TAbstractFile[] = [];
@@ -408,43 +410,56 @@ const uploadStuff = async ( view: MarkdownView, vaul: Vault, settings: SettingsP
 					}
 					filesToTranscribe.push(linkedFile)
 				}
-				// // Now that we have all the files to transcribe, we can transcribe them
-				// for (const fileToTranscribe of filesToTranscribe) {
-				// 	console.log('Transcribing ' + fileToTranscribe.path);
+				// Now that we have all the files to transcribe, we can transcribe them
+				for (const fileToTranscribe of filesToTranscribe) {
+					console.log('Uploading ' + fileToTranscribe.path);
 
-				// 	// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
-				// 	// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
-				// 	// I believe this to be equivilent to the following curl command: curl --location --request POST 'http://djmango-bruh:9000/asr?task=transcribe&language=en' --form 'audio_file=@"test-vault/02 Files/Recording.webm"'
+					// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
+					// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
+					// I believe this to be equivilent to the following curl command: curl --location --request POST 'http://djmango-bruh:9000/asr?task=transcribe&language=en' --form 'audio_file=@"test-vault/02 Files/Recording.webm"'
 					
-				// 	// Generate the form data payload boundry string, it can be arbitrary, I'm just using a random string here
-				// 	// https://stackoverflow.com/questions/3508338/what-is-the-boundary-in-multipart-form-data
-				// 	// https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
-				// 	const N = 16 // The length of our random boundry string
-				// 	const randomBoundryString = "djmangoBoundry" + Array(N+1).join((Math.random().toString(36)+'00000000000000000').slice(2, 18)).slice(0, N) 
+					// Generate the form data payload boundry string, it can be arbitrary, I'm just using a random string here
+					// https://stackoverflow.com/questions/3508338/what-is-the-boundary-in-multipart-form-data
+					// https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
+					const N = 16 // The length of our random boundry string
+					const randomBoundryString = "djmangoBoundry" + Array(N+1).join((Math.random().toString(36)+'00000000000000000').slice(2, 18)).slice(0, N) 
 					
-				// 	// Construct the form data payload as a string
-				// 	const pre_string = `------${randomBoundryString}\r\nContent-Disposition: form-data; mediaUpload=${JSON.stringify({ folderId: 0 })}; mediaUpload="blob"\r\nContent-Type: "image/jpeg"\r\n\r\n`;
-				// 	const post_string = `\r\n------${randomBoundryString}--`
-					
-				// 	// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
-				// 	const pre_string_encoded = new TextEncoder().encode(pre_string);
-				// 	const data = new Blob([await vaul.adapter.readBinary(fileToTranscribe.path)]);
-				// 	const post_string_encoded = new TextEncoder().encode(post_string);
-				// 	const concatenated = await new Blob([pre_string_encoded, await getBlobArrayBuffer(data), post_string_encoded]).arrayBuffer()
+					// Construct the form data payload as a string
+					//const pre_string = `------${randomBoundryString}\r\nContent-Disposition: form-data; mediaUpload=${JSON.stringify({ folderId: 0 })}; mediaUpload="blossom.png"\r\nContent-Type: "image/jpeg"\r\n\r\n`;
+					const pre_string = `------${randomBoundryString}\r\nContent-Disposition: form-data; name=mediaUpload\r\n\r\n${JSON.stringify({ folderId: 0 })}`;
+					//const pre_string2 = `------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename="blossom.png"\r\nContent-Type: image/jpeg\r\n\r\n`
+					const pre_string2 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename="blossom.png"\r\nContent-Type: image/jpeg\r\n\r\n`
+					const post_string = `\r\n------${randomBoundryString}--`
 
-				// 	// Now that we have the form data payload as an array buffer, we can pass it to requestURL
-				// 	// We also need to set the content type to multipart/form-data and pass in the boundry string
-				// 	const options: RequestUrlParam = {
-				// 		method: 'POST',
-				// 		url: `${settings.url}/u`,
-				// 		contentType: `multipart/form-data; boundary=----${randomBoundryString}`,
-				// 		body: concatenated
-				// 	};
+					// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
+					const pre_string_encoded = new TextEncoder().encode(pre_string);
+					const pre_string2_encoded = new TextEncoder().encode(pre_string2);
+					const data = new Blob([await vaul.adapter.readBinary(fileToTranscribe.path)]);
+					const post_string_encoded = new TextEncoder().encode(post_string);
+					const concatenated = await new Blob([pre_string_encoded, pre_string2_encoded,await getBlobArrayBuffer(data), post_string_encoded]).arrayBuffer()
 
-				// 	requestUrl(options).then((response) => {
-				// 		console.log(response);
-				// 	}).catch((error) => {
-				// 		console.error(error);
-				// 	});
-				//}
+					// Now that we have the form data payload as an array buffer, we can pass it to requestURL
+					// We also need to set the content type to multipart/form-data and pass in the boundry string
+					const options: RequestUrlParam = {
+						method: 'POST',
+						url: `${settings.url}/u`,
+						contentType: `multipart/form-data; boundary=----${randomBoundryString}`,
+						headers: {
+							"Authorization": `Bearer ${settings.adminToken}`,
+			                //"Content-Type": "multipart/form-data",
+			                //"Accept": "application/json",
+			                //"Connection": "keep-alive",
+			                //"DNT": "1",
+			                //"Access-Control-Allow-Methods": "POST",
+			                //"Accept-Encoding": "gzip, deflate, br",
+			                //"Origin": "https://wiki.example.org",
+							},
+						body: concatenated
+					};
+
+					requestUrl(options)
+					  .then(response => response.json())
+					  .then(data => console.log('jsonData: ' + data)) 
+					  .catch(error => console.error('requestUrlError: ' + error));
+				}
 			}
