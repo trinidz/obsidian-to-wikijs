@@ -12,4 +12,6 @@ export interface DataProp {
 	content: string;
 }
 
-export const IMG_WHITELIST = ["jpg", "jpeg", "png", "bmp", "svg"]
+/** Accepted Obsidian Image File Formats https://help.obsidian.md/file-formats
+*/
+export const ImageFileFormats = ["jpg", "jpeg", "png", "bmp", "svg", "avif", "gif", "webp"]

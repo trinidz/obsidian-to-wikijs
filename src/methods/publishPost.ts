@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { SettingsProp, DataProp, IMG_WHITELIST } from "./../types/index";
+import { SettingsProp, DataProp, ImageFileFormats } from "../types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
 
 const matter = require("gray-matter");
@@ -21,7 +21,7 @@ let wikijsReq: RequestUrlParam = {
 	body: ""
 }
 
-export const publishPost = async (view: MarkdownView, vaul: Vault ,settings: SettingsProp) => {
+export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: SettingsProp) => {
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
 
@@ -54,10 +54,10 @@ export const publishPost = async (view: MarkdownView, vaul: Vault ,settings: Set
 
         ///TESTING START 
         //let imgArr = await getImages((<DataProp>data).content, vaul)
-		uploadImages(view,vaul,settings) 
+		uploadLinkedImages(view,vlt,settings) 
         ///TESTING END
 
-		let content_reconfig = configCalloutContent((<DataProp>data).content)
+		let content_reconfig = parseCalloutElements((<DataProp>data).content)
 
 		const content_filtered = content_reconfig
 			.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
@@ -148,11 +148,26 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 	return noteId;
 }
 
-const configCalloutContent = (content: string): string => {
+/**
+ * Convert Obsidian style callout elements to Wikijs style
+ * - This method converts the 3 types of obsidian callout elements
+ *  (info, warning and danger) that are compatible with wikijs.
+ * 
+ * > [!Info]
+ * > example obsidian style callout
+ * 
+ * > example wikijs style callout
+ * > {.is-info} 
+ * 
+ * @private
+ * @param {string} noteContent Content of an obsidian note
+ * @return {string} Content of the obsidian note with callouts converted to wikijs style 
+ */
+const parseCalloutElements = (noteContent: string): string => {
 	const calloutTagLineNums: number[] = []
     let calloutTagType = -1 
-	const input_lines = content.split('\n')
-	const output_lines = content.split('\n')
+	const input_lines = noteContent.split('\n')
+	const output_lines = noteContent.split('\n')
 	let obsidMainTagIndex = 0
 	let wikiMainTagIndex = 0
 
@@ -195,7 +210,7 @@ const configCalloutContent = (content: string): string => {
 	})
 
 	if (!calloutTagsExist){
-		return content
+		return noteContent
 	}
 
 	let captured_tag: string
@@ -207,6 +222,7 @@ const configCalloutContent = (content: string): string => {
 		}
 	})
 
+	//convert content from string[] back to string
 	output_lines.forEach((ele, indx)=>{
 		if(indx == 0) { 
 			new_content = ele 
@@ -218,6 +234,52 @@ const configCalloutContent = (content: string): string => {
 	//console.log("\noutput lines:\n ",output_lines)
 	//console.log('\nNewContent:\n ' + new_content)
 	return new_content
+}
+
+/**
+ * Convert Obsidian linked image storage file paths to Wikijs storage file paths
+ * 
+ * @private
+ * @param {string} noteContent Content of an obsidian note
+ * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
+ */
+const parseLinkedImageElements = (noteContent: string): string  => {
+	const re_imgHyperLink = / {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
+	const re_imgDirectLink = /!?\[\[[\w/.#@-]+\]\][\n]*/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
+	const contentLines = noteContent.split('\n');
+    
+    for (const contentLn of contentLines) {
+		var found = contentLn.search(re_imgHyperLink);
+		
+		if (found == -1) {
+			continue
+		}
+      
+		//check if is a web image
+        if ( contentLn.match(/\]\(https?:\/\/[\w/.-]+\)/) && !contentLn.match(/\]\(https?:\/\/localhost\/\)/) ) {
+			//console.log('\nweb img: ' + ln);
+			continue
+	    }
+
+		console.log('\nnote content with lined img: ' + contentLn);
+
+		let imgLink = contentLn.split(/\]\(/)
+		let imgPath = imgLink[1].split(')')[0]
+		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
+		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+  
+		if (!ImageFileFormats.some(ele => {
+			//console.log('\nbool: ' + ele === imgExt) 
+			//console.log('\nExts: ' + imgExt + '===' + ele) 
+			return ele === imgExt
+		}))
+			continue
+
+       let re_foundImg = new RegExp("](" + imgPath + ")");
+
+		contentLn.replace(re_foundImg, "](" + imgFname + ")" )
+    }
+	return noteContent
 }
 
 const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> => {
@@ -244,7 +306,7 @@ const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> =
 		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
 		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
   
-		if (!IMG_WHITELIST.some(ele => {
+		if (!ImageFileFormats.some(ele => {
 			//console.log('\nbool: ' + ele === imgExt) 
 			//console.log('\nExts: ' + imgExt + '===' + ele) 
 			return ele === imgExt
@@ -286,7 +348,7 @@ const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> =
 //https://github.com/alangrainger/share-note/blob/main/src/note.ts
 //https://github.com/requarks/wiki/discussions/6049
 //https://github.com/djmango/obsidian-transcription/blob/cf5029b7f9aca97396a3befa2f963f15c87fabca/main.ts
-const uploadImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
+const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
 	// Get the current filepath
 	const markdownFilePath = view.file.path;
 	console.log('\nSearching image files in vault : ' + markdownFilePath);
@@ -295,16 +357,16 @@ const uploadImages = async (view: MarkdownView, vlt: Vault, settings: SettingsPr
 	const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
 	console.log('\nimagesLinked: ' + filesLinked)
 
-	// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions we want to transcribe
+	// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions
 	const imagesToUpload: TAbstractFile[] = [];
 	for (const linkedFilePath of filesLinked) {
 		const linkedFileExtension = linkedFilePath.split('.').pop();
-		if (linkedFileExtension === undefined || (!IMG_WHITELIST.some(ele => ele === linkedFileExtension))) {
-			console.log('Skipping ' + linkedFilePath + ' because the file extension is not in the list of transcribeable file extensions');
+		if (linkedFileExtension === undefined || (!ImageFileFormats.some(ele => ele === linkedFileExtension))) {
+			console.log('Skipping ' + linkedFilePath + ' because the file extension is not an accepted file extension');
 			continue;
 		}
 
-		// We now know that the file extension is in the list of transcribeable file extensions
+		// We now know that the file extension is in the list of image file extensions
 		const linkedFile = vlt.getAbstractFileByPath(linkedFilePath);
 
 		// If the file is not found, we skip it
@@ -312,9 +374,12 @@ const uploadImages = async (view: MarkdownView, vlt: Vault, settings: SettingsPr
 			console.log('Could not find file ' + linkedFilePath);
 			continue;
 		}
+
+		//console.log('\nlinkedFileName: ' + linkedFile.name)
+
 		imagesToUpload.push(linkedFile)
 	}
-	// Now that we have all the files to transcribe, we can transcribe them
+	// Now that we have all the images to upload, we can upload them
 	for (const fileToTranscribe of imagesToUpload) {
 		console.log('Uploading ' + fileToTranscribe.path);
 
@@ -353,7 +418,12 @@ const uploadImages = async (view: MarkdownView, vlt: Vault, settings: SettingsPr
 		};
 
 		requestUrl(options)
-			.then(response => console.log(response))
+			.then(response => {
+				if (response.status == 200) 
+					console.log('\nUpload success: ' + response.text)
+				else
+					console.log('\nUpload failed: ' + response.status)
+			})
 			//{"succeeded":false,"message":"Missing upload folder metadata."}
 			//.then(data => console.log('jsonData: ' + data))
 			.catch(error => console.error('requestUrlError: ' + error));
