@@ -53,18 +53,13 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 		};
 
         ///TESTING START 
-        //let imgArr = await getImages((<DataProp>data).content, vaul)
-		let imgContent = parseLinkedImageElements((<DataProp>data).content)
+		let parsedContent = parseLinkedImageElements((<DataProp>data).content)
 		uploadLinkedImages(view,vlt,settings) 
         ///TESTING END
 
-		//let content_reconfig = parseCalloutElements((<DataProp>data).content)
-		let content_reconfig = parseCalloutElements(imgContent)
+		let content_reconfig = parseCalloutElements(parsedContent)
 
 		const content_filtered = content_reconfig
-			.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
-			.replace(/^ {0,3}> ?\[\!warning\]/gmi,"> {.is-warning}")
-			.replace(/^ {0,3}> ?\[\!danger\]/gmi,"> {.is-danger}")
 			.replace(/\\/g, "/")
 			.replace(/\"/g, "'")
 			.replace(/\n/g, "\\n")
@@ -166,6 +161,7 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
  * @return {string} Content of the obsidian note with callouts converted to wikijs style 
  */
 const parseCalloutElements = (noteContent: string): string => {
+	const regex_obsCalloutTags = /^ {0,3}> ?\[\!info\][ ]*[\n]|^ {0,3}> ?\[\!warning\][ ]*[\n]|^ {0,3}> ?\[\!danger\][ ]*[\n]/i
 	const calloutTagLineNums: number[] = []
     let calloutTagType = -1 
 	const input_lines = noteContent.split('\n')
@@ -175,14 +171,13 @@ const parseCalloutElements = (noteContent: string): string => {
 
 	//console.log("\ninput_lines:\n" + input_lines)
 
-	input_lines.forEach((element, i, localArr) => {
-		element += '\n'
+	input_lines.forEach((noteContentLn, i, localArr) => {
+		noteContentLn += '\n'
 		output_lines[i] += '\n'
 		calloutTagLineNums.push(calloutTagType)
 
 		if (calloutTagType == -1) {
-			var found = element.search(/^ {0,3}> ?\[\!info\][ ]*[\n]|^ {0,3}> ?\[\!warning\][ ]*[\n]|^ {0,3}> ?\[\!danger\][ ]*[\n]/i)
-			if (found != -1){
+			if (regex_obsCalloutTags.test(noteContentLn)){
 				if ( i == 0 || (i > 0 && localArr[i-1].search(/^ *>/i) == -1) ) {
 					//console.log('Ind:' + i + ' Main Tag: ' + element)
 					obsidMainTagIndex = i
@@ -216,7 +211,6 @@ const parseCalloutElements = (noteContent: string): string => {
 	}
 
 	let captured_tag: string
-	let new_content:string
 	calloutTagLineNums.forEach((element, indx)=>{
 		if (element >= 0) {
 			captured_tag = output_lines.splice(indx,1)[0]
@@ -224,18 +218,16 @@ const parseCalloutElements = (noteContent: string): string => {
 		}
 	})
 
-	//convert content from string[] back to string
-	output_lines.forEach((ele, indx)=>{
-		if(indx == 0) { 
-			new_content = ele 
-		} else {
-			new_content += ele
-		}
-	})
+	let parsedContent = output_lines.join("")
 
-	//console.log("\noutput lines:\n ",output_lines)
-	//console.log('\nNewContent:\n ' + new_content)
-	return new_content
+	//console.log("\noutput lines:\n ", output_lines)
+	//console.log('\nNewContent:\n ' + parsedContent)
+
+	parsedContent = parsedContent.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
+	.replace(/^ {0,3}> ?\[\!warning\]/gmi,"> {.is-warning}")
+	.replace(/^ {0,3}> ?\[\!danger\]/gmi,"> {.is-danger}")
+
+	return parsedContent
 }
 
 /**
