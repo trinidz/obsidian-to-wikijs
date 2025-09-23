@@ -246,47 +246,58 @@ const parseCalloutElements = (noteContent: string): string => {
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
 const parseLinkedImageElements = (noteContent: string): string  => {
-	const re_imgHyperLink = /!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
-	const re_imgDirectLink = /!?\[\[[\w/.#@-]+\]\][\n]*/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
+	const re_imgHyperLink = /!?\[[\w/.#@-]+\]\([\w/:.-]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
+	const re_imgDirectLink = /!?\[\[[\w/.#@-]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
 	let contentLines = noteContent.split('\n');
     let parsedContentLines: string[] = []
     
     for (const contentLn of contentLines) {
 		parsedContentLines.push(contentLn + '\n')
 
-		if (!re_imgHyperLink.test(contentLn)) {
+		if (!re_imgHyperLink.test(contentLn) && !re_imgDirectLink.test(contentLn) ) {
 			continue
 		}
       
-		//check if is a web image
+		//check if is a web image; also web image does not work inside of [[]] type link so don't have to check
         if ( contentLn.match(/\]\(https?:\/\/[\w/.-]+\)/) && !contentLn.match(/\]\(https?:\/\/localhost\/\)/) ) {
 			//console.log('\nweb img: ' + ln);
 			continue
 	    }
 		console.log('\ncontent line with linked img: ' + contentLn);
 
-		let imgLink = contentLn.split(/\]\(/)
-		let imgPath = imgLink[1].split(')')[0]
-		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
-		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+		let imgLink: string[]
+		let imgPath: string
+		let imgFname: string
+		let imgExt: string
+		let parsedLine: string
+
+		if(re_imgHyperLink.test(contentLn)){
+			imgLink = contentLn.split(/\]\(/)
+	        imgPath = imgLink[1].split(')')[0]
+		    imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
+		    imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+			const re_imgPath = new RegExp("\\]\\("+imgPath);
+	        parsedLine = contentLn.replace(re_imgPath, "](/" + imgFname)
+		} else {
+			imgLink = contentLn.split(/\[\[/)
+	        imgPath = imgLink[1].split(/\]\]/)[0]
+		    imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
+		    imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+			const re_imgPath = new RegExp("\\[\\["+imgPath+"\\]\\]");
+	        parsedLine = contentLn.replace(re_imgPath, "[image](/" + imgFname + ")")
+		}
 		//console.log('\nimgPath: '+ imgPath + ' imgFname:' + imgFname)
 
-		if (!ImageFileFormats.some(ele => {
-			//console.log('\nbool: ' + ele === imgExt) 
-			//console.log('\nExts: ' + imgExt + '===' + ele) 
-			return ele === imgExt
-		}))
+		if (!ImageFileFormats.some(ele => ele === imgExt))
 			continue
 
-       const re_imgPath = new RegExp("\\]\\("+imgPath);
-	   let parsedLine = contentLn.replace(re_imgPath, "](/" + imgFname)
 	   console.log('\nParsed Ln: ' + parsedLine)
 	   
 	   parsedContentLines.pop()
 	   parsedContentLines.push(parsedLine+'\n')
     }
 
-	console.log("parsedContent: "+ parsedContentLines.join(""))
+	//console.log("parsedContent: "+ parsedContentLines.join(""))
 	return parsedContentLines.join("")
 }
 
