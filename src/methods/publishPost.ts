@@ -54,10 +54,12 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 
         ///TESTING START 
         //let imgArr = await getImages((<DataProp>data).content, vaul)
+		let imgContent = parseLinkedImageElements((<DataProp>data).content)
 		uploadLinkedImages(view,vlt,settings) 
         ///TESTING END
 
-		let content_reconfig = parseCalloutElements((<DataProp>data).content)
+		//let content_reconfig = parseCalloutElements((<DataProp>data).content)
+		let content_reconfig = parseCalloutElements(imgContent)
 
 		const content_filtered = content_reconfig
 			.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
@@ -244,14 +246,15 @@ const parseCalloutElements = (noteContent: string): string => {
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
 const parseLinkedImageElements = (noteContent: string): string  => {
-	const re_imgHyperLink = / {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
+	const re_imgHyperLink = /!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
 	const re_imgDirectLink = /!?\[\[[\w/.#@-]+\]\][\n]*/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
-	const contentLines = noteContent.split('\n');
+	let contentLines = noteContent.split('\n');
+    let parsedContentLines: string[] = []
     
     for (const contentLn of contentLines) {
-		var found = contentLn.search(re_imgHyperLink);
-		
-		if (found == -1) {
+		parsedContentLines.push(contentLn + '\n')
+
+		if (!re_imgHyperLink.test(contentLn)) {
 			continue
 		}
       
@@ -260,14 +263,14 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 			//console.log('\nweb img: ' + ln);
 			continue
 	    }
-
-		console.log('\nnote content with lined img: ' + contentLn);
+		console.log('\ncontent line with linked img: ' + contentLn);
 
 		let imgLink = contentLn.split(/\]\(/)
 		let imgPath = imgLink[1].split(')')[0]
 		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
 		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
-  
+		//console.log('\nimgPath: '+ imgPath + ' imgFname:' + imgFname)
+
 		if (!ImageFileFormats.some(ele => {
 			//console.log('\nbool: ' + ele === imgExt) 
 			//console.log('\nExts: ' + imgExt + '===' + ele) 
@@ -275,11 +278,16 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 		}))
 			continue
 
-       let re_foundImg = new RegExp("](" + imgPath + ")");
-
-		contentLn.replace(re_foundImg, "](" + imgFname + ")" )
+       const re_imgPath = new RegExp("\\]\\("+imgPath);
+	   let parsedLine = contentLn.replace(re_imgPath, "](/" + imgFname)
+	   console.log('\nParsed Ln: ' + parsedLine)
+	   
+	   parsedContentLines.pop()
+	   parsedContentLines.push(parsedLine+'\n')
     }
-	return noteContent
+
+	console.log("parsedContent: "+ parsedContentLines.join(""))
+	return parsedContentLines.join("")
 }
 
 const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> => {
