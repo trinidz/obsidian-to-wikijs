@@ -163,9 +163,9 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 const parseCalloutElements = (noteContent: string): string => {
 	const regex_obsCalloutTags = /^ {0,3}> ?\[\!info\][ ]*[\n]|^ {0,3}> ?\[\!warning\][ ]*[\n]|^ {0,3}> ?\[\!danger\][ ]*[\n]/i
 	const calloutTagLineNums: number[] = []
-    let calloutTagType = -1 
 	const input_lines = noteContent.split('\n')
 	const output_lines = noteContent.split('\n')
+	let calloutTagType = -1 
 	let obsidMainTagIndex = 0
 	let wikiMainTagIndex = 0
 
@@ -238,15 +238,15 @@ const parseCalloutElements = (noteContent: string): string => {
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
 const parseLinkedImageElements = (noteContent: string): string  => {
-	const re_imgHyperLink = /!?\[[\w/.#@-]+\]\([\w/:.-]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
-	const re_imgDirectLink = /!?\[\[[\w/.#@-]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
+	const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w]+(?:[a-zA-Z0-9/._ -]*[\w])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
+	const re_imgDirectLink = /!?\[\[\/?[\w]+(?:[a-zA-Z0-9/._ -]*[\w])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
 	let contentLines = noteContent.split('\n');
     let parsedContentLines: string[] = []
     
     for (const contentLn of contentLines) {
 		parsedContentLines.push(contentLn + '\n')
 
-		if (!re_imgHyperLink.test(contentLn) && !re_imgDirectLink.test(contentLn) ) {
+		if (!re_imgHyperLink.test(contentLn) && !re_imgDirectLink.test(contentLn)) {
 			continue
 		}
       
@@ -280,7 +280,7 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 		}
 		//console.log('\nimgPath: '+ imgPath + ' imgFname:' + imgFname)
 
-		if (!ImageFileFormats.some(ele => ele === imgExt))
+		if (!ImageFileFormats.some(imgFmt => imgFmt === imgExt))
 			continue
 
 	   console.log('\nParsed Ln: ' + parsedLine)
