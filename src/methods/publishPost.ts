@@ -6,14 +6,16 @@ const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
 
 export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: SettingsProp) => {
+	const regex_ipAddress = /^(?:https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+	const regex_url = /^(https?:\/\/.)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/i
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
 
-	if (settings.url == "" ){ 
-		new Notice("Invalid Site URL. Please Check your Site URL setting.") 
+	if (!regex_url.test(settings.url) && !regex_ipAddress.test(settings.url) ){ 
+		new Notice("Invalid Wikijs URL. Please check your URL settings.") 
 			return
 	} else if (settings.adminToken.length != 502) { 
-		new Notice("Invalid API Key. Please Check your API Token setting.") 
+		new Notice("Invalid API Key. Please check your API Token setting.") 
 			return
 	} else if (metaMatter.uuid == undefined) { 
 		new Notice("uuid is missing from document front matter.") 
@@ -138,7 +140,7 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 
 		const result = await requestUrl(wikijsReq)
 		const json = result.json;
-		
+
 		if (json?.data.pages?.list) {
 			if (json.data.pages.list.length >= 1) {
 				noteId = json.data.pages.list[0].id;
@@ -310,7 +312,7 @@ const parseLinkedImageElements = (noteContent: string): string  => {
  * @param {SettingsProp} settings app settings
  * @return {Promise<void>} 
  */
-const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
+const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<void> => {
 	// Get the current filepath
 	const markdownFilePath = view.file.path;
 	console.log('\nSearching image files in vault: ' + markdownFilePath);
@@ -417,3 +419,4 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 // ![hello]()
 // ![AfterExclamation] (spaceAfter])
 // ![hello](/_kk8k/.k/k)
+

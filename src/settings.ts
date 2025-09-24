@@ -27,7 +27,7 @@ export class SettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Wikijs URL")
 			.setDesc(
-				"The URL of your wikijs site. Make sure to include https:// at the beginning"
+				"The URL of your wikijs site. Make sure to include http(s):// at the beginning."
 			)
 			.addText((text) =>
 				text
