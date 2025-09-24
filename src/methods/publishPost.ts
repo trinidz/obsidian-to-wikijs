@@ -5,22 +5,6 @@ import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayB
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
 
-let wikijsReq: RequestUrlParam = {
-	url: "",
-	method: "POST",
-	contentType: "application/json",
-	headers: {
-		"Content-Type": "application/json",
-		"Accept": "application/json",
-		"Connection": "keep-alive",
-		"DNT": "1",
-		//"Access-Control-Allow-Methods": "POST",
-		"Accept-Encoding": "gzip, deflate, br",
-		//"Origin": "https://wiki.example.org",
-	},
-	body: ""
-}
-
 export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: SettingsProp) => {
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
@@ -52,25 +36,20 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 			locale: metaMatter?.locale || "en",
 		};
 
-        ///TESTING START 
-		let parsedContent = parseLinkedImageElements((<DataProp>data).content)
-		uploadLinkedImages(view,vlt,settings) 
-        ///TESTING END
+		let tagArr = "["
+		frontmatter.tags.forEach((tag: string) => {tagArr += `\"${tag}\",`});
+		tagArr += `\"${UUIDTAG}\"]`
 
-		let content_reconfig = parseCalloutElements(parsedContent)
-
-		const content_filtered = content_reconfig
+		new Notice(`Connecting to ${settings.url} ...`);
+		
+		let parsedImageContent = parseLinkedImageElements((<DataProp>data).content)
+		let parsedCalloutContent = parseCalloutElements(parsedImageContent)
+		const finishedContent = parsedCalloutContent
 			.replace(/\\/g, "/")
 			.replace(/\"/g, "'")
 			.replace(/\n/g, "\\n")
 			.replace(/\r/g, "\\r")
 			.replace(/\t/g, "\\t")
-		
-		let tagArr = "["
-		frontmatter.tags.forEach((element: string) => {tagArr += `\"${element}\",`});
-		tagArr += `\"${UUIDTAG}\"]`
-
-		new Notice(`Connecting to ${settings.url} ...`);
 
 		let reqBody: string;
 		try {
@@ -81,17 +60,34 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 			}
 				reqBody = JSON.stringify({ query: `mutation {pages { delete( id: ${noteID} ) {responseResult { succeeded slug errorCode message } } } }` })
 			} else if (noteID == -1 || !frontmatter.update) {
-				reqBody = JSON.stringify({ query: `mutation {pages { create( path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${content_filtered}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
+				reqBody = JSON.stringify({ query: `mutation {pages { create( path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${finishedContent}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
 			} else {
-				reqBody = JSON.stringify({ query: `mutation {pages { update( id: ${noteID} path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${content_filtered}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
+				reqBody = JSON.stringify({ query: `mutation {pages { update( id: ${noteID} path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${finishedContent}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
 			}
 
-            wikijsReq.url = `${settings.url}/graphql`;
-			wikijsReq.headers["Authorization"] = `Bearer ${settings.adminToken}`
-			wikijsReq.body = reqBody;
+			const wikijsReq: RequestUrlParam = {
+				url: `${settings.url}/graphql`,
+				method: "POST",
+				contentType: "application/json",
+				headers: {
+					"Authorization": `Bearer ${settings.adminToken}`,
+					"Content-Type": "application/json",
+					"Accept": "application/json",
+					"Connection": "keep-alive",
+					"DNT": "1",
+					//"Access-Control-Allow-Methods": "POST",
+					"Accept-Encoding": "gzip, deflate, br",
+					//"Origin": "https://wiki.example.org",
+				},
+				body: reqBody
+			}
 			const result = await requestUrl(wikijsReq)
-
 			const json = result.json;
+			//console.log("\nContent upload response:\n" + JSON.stringify(result))
+			
+			if ((json?.data?.pages?.create?.responseResult.succeeded) || (json?.data?.pages?.update?.responseResult.succeeded)) 
+				await uploadLinkedImages(view, vlt, settings) 
+
 			if (json?.data?.pages?.create?.responseResult) {
 				if (json?.data.pages.create.responseResult.succeeded) {
 					new Notice(`Success -- Page ${settings.url}/${frontmatter.path} posted!`)
@@ -115,7 +111,7 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 			} else {
 				new Notice(`Unknown error status: ${result.status} -- Error text: ${result.text}`)
 			}
-			return json;
+			return
 		} catch (error: any) {
 			new Notice(`Can't connect to ${settings.url} API. Is the API URL and Admin API Key correct? ${error.name}: ${error.message}`)
 		}
@@ -125,13 +121,24 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 	let noteId: number = -1;
 	try {
-		wikijsReq.url = `${settings.url}/graphql`;
-		wikijsReq.headers["Authorization"] = `Bearer ${settings.adminToken}`
-		wikijsReq.body = JSON.stringify({ query: `{\n pages {\n list(tags: [\"${uuidTag}\"]) {\n id\n tags\n path\n }\n }\n}\n` })
+		const wikijsReq: RequestUrlParam = {
+			url: `${settings.url}/graphql`,
+			method: "POST",
+			contentType: "application/json",
+			headers: {
+				"Authorization": `Bearer ${settings.adminToken}`,
+				"Content-Type": "application/json",
+				"Accept": "application/json",
+				"Connection": "keep-alive",
+				"DNT": "1",
+				"Accept-Encoding": "gzip, deflate, br",
+			},
+			body: JSON.stringify({ query: `{\n pages {\n list(tags: [\"${uuidTag}\"]) {\n id\n tags\n path\n }\n }\n}\n` })
+		}
 
 		const result = await requestUrl(wikijsReq)
-
 		const json = result.json;
+		
 		if (json?.data.pages?.list) {
 			if (json.data.pages.list.length >= 1) {
 				noteId = json.data.pages.list[0].id;
@@ -255,7 +262,7 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 			//console.log('\nweb img: ' + ln);
 			continue
 	    }
-		console.log('\ncontent line with linked img: ' + contentLn);
+		console.log('\nlinked img found in content: ' + contentLn);
 
 		let imgLink: string[]
 		let imgPath: string
@@ -279,11 +286,12 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 	        parsedLine = contentLn.replace(re_imgPath, "[image](/" + imgFname + ")")
 		}
 		//console.log('\nimgPath: '+ imgPath + ' imgFname:' + imgFname)
+		//console.log('\nParsed Ln: ' + parsedLine)
 
-		if (!ImageFileFormats.some(imgFmt => imgFmt === imgExt))
+		if (!ImageFileFormats.some(imgFmt => imgFmt === imgExt)){
+			console.log('\nBad image format: ' + imgFname)
 			continue
-
-	   console.log('\nParsed Ln: ' + parsedLine)
+		}
 	   
 	   parsedContentLines.pop()
 	   parsedContentLines.push(parsedLine+'\n')
@@ -293,52 +301,107 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 	return parsedContentLines.join("")
 }
 
-const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> => {
-    const re_imgLink = / {0,3}!?\[[\w/.#@-]+\]\([\w/:.-]+\)[\n]*/i; //regex to find img hyperlinks
-	let imgBinaries: ArrayBuffer[] = new Array()
-	const contentLines = content.split('\n');
-    
-    for (const ln of contentLines) {
-		var found = ln.search(re_imgLink);
-		
-		if (found == -1) {
-			continue
+/**
+ * Upload linked images in note to wikijs storage
+ * 
+ * @private
+ * @param {MarkdownView} view note mardown view
+ * @param {Vault} vlt vault containing notes
+ * @param {SettingsProp} settings app settings
+ * @return {Promise<void>} 
+ */
+const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
+	// Get the current filepath
+	const markdownFilePath = view.file.path;
+	console.log('\nSearching image files in vault: ' + markdownFilePath);
+
+	// Get all linked files in the markdown file
+	const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
+	console.log('\nimagesLinked: ' + filesLinked)
+
+	// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions
+	const imagesToUpload: TAbstractFile[] = [];
+	for (const linkedFilePath of filesLinked) {
+		const linkedFileExtension = linkedFilePath.split('.').pop();
+		if (linkedFileExtension === undefined || (!ImageFileFormats.some(imageFormat => imageFormat === linkedFileExtension))) {
+			console.log('Skipping ' + linkedFilePath + ' because the file extension is not an accepted');
+			continue;
 		}
-      
-		//check if is a web image
-        if ( ln.match(/\]\(https?:\/\/[\w/.-]+\)/) && !ln.match(/\]\(https?:\/\/localhost\/\)/) ) {
-			//console.log('\nweb img: ' + ln);
-			continue
-	    }
-		console.log('\nlocal img: ' + ln);
 
-		let imgLink = ln.split(/\]\(/)
-		let imgPath = imgLink[1].split(')')[0]
-		let imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
-		let imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
-  
-		if (!ImageFileFormats.some(ele => {
-			//console.log('\nbool: ' + ele === imgExt) 
-			//console.log('\nExts: ' + imgExt + '===' + ele) 
-			return ele === imgExt
-		}))
-			continue
+		// We now know that the file extension is in the list of image file extensions
+		const linkedFile = vlt.getAbstractFileByPath(linkedFilePath);
 
-		//console.log('\nimgFname: ' + imgFname) 
-		//console.log('\nvfilesLength :' + vaultTfiles.length) 
+		// If the file is not found, we skip it
+		if (linkedFile === null) {
+			console.log('Could not find file ' + linkedFilePath);
+			continue;
+		}
+		//console.log('\nlinkedFileName: ' + linkedFile.name)
 
-	    for (const vltFile of vlt.getFiles()) {
-			//console.log('\nimgFname: ' + imgFname + ' vltFileName: ' + vltFile.name ) 
-		    if(imgFname === vltFile.name){
-			  imgBinaries.push(await vlt.readBinary(vltFile))
-			  console.log('\nimgBinariesLength: ' + imgBinaries[imgBinaries.length-1].byteLength + ' arraylength: ' + imgBinaries.length )
-		      console.log('\nvltFilename: ' + vltFile.name + ' size: ' + vltFile.stat.size + ' path: ' + vltFile.path + ' ext: ' + vltFile.extension )
-			  break;
-		    }
-	    };
+		imagesToUpload.push(linkedFile)
 	}
-    
-	return imgBinaries
+
+	// Now that we have all the images to upload, we can upload them
+	let successImageUploads = 0 
+	for (const imgToUpload of imagesToUpload) {
+		//console.log('Uploading ' + imgToUpload.path);
+
+		// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
+		// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
+		// I believe this to be equivilent to the following curl command: curl --location --request POST 'http://djmango-bruh:9000/asr?task=transcribe&language=en' --form 'audio_file=@"test-vault/02 Files/Recording.webm"'
+
+		// Generate the form data payload boundry string, it can be arbitrary, I'm just using a random string here
+		// https://stackoverflow.com/questions/3508338/what-is-the-boundary-in-multipart-form-data
+		// https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
+		const N = 16 // The length of our random boundry string
+		const randomBoundryString = "djmangoBoundry" + Array(N + 1).join((Math.random().toString(36) + '00000000000000000').slice(2, 18)).slice(0, N)
+
+		// Construct the form data payload as a string
+		const form_data_payload_00 = `------${randomBoundryString}\r\nContent-Disposition: form-data; name=mediaUpload\r\n\r\n${JSON.stringify({ folderId: 0 })}`;
+		const form_data_payload_01 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename=${imgToUpload.name}\r\nContent-Type: image/jpeg\r\n\r\n`
+		const form_data_payload_end = `\r\n------${randomBoundryString}--`
+
+		// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
+		const form_data_payload_encoded_00 = new TextEncoder().encode(form_data_payload_00);
+		const form_data_payload_encoded_01 = new TextEncoder().encode(form_data_payload_01);
+		const data = new Blob([await vlt.adapter.readBinary(imgToUpload.path)]);
+		const form_data_payload_encoded_end = new TextEncoder().encode(form_data_payload_end);
+		const imageBlob = await new Blob([form_data_payload_encoded_00, form_data_payload_encoded_01, await getBlobArrayBuffer(data), form_data_payload_encoded_end]).arrayBuffer()
+
+		//https://github.com/alangrainger/share-note/blob/main/src/note.ts
+        //https://github.com/requarks/wiki/discussions/6049
+        //https://github.com/djmango/obsidian-transcription/blob/cf5029b7f9aca97396a3befa2f963f15c87fabca/main.ts
+		// Now that we have the form data payload as an array buffer, we can pass it to requestURL
+		// We also need to set the content type to multipart/form-data and pass in the boundry string
+		const options: RequestUrlParam = {
+			method: 'POST',
+			url: `${settings.url}/u`,
+			contentType: `multipart/form-data; boundary=----${randomBoundryString}`,
+			headers: {
+				"Authorization": `Bearer ${settings.adminToken}`,
+			},
+			body: imageBlob
+		};
+
+		try {
+			const result = await requestUrl(options)
+			if (result.status == 200) {
+				//success response from wikijs image upload is string "ok"
+				successImageUploads++
+				console.log('\nImage upload success: ' + imgToUpload.name)
+			} else {
+				//{"succeeded":false,"message":"Missing upload folder metadata."}
+				console.log("\nImage upload error resp:\n" + result.json)
+			}
+		} catch (error: any) {
+			console.log('\nImage upload failed: ' + imgToUpload.name)
+			console.log('\nImage upload error:\n' + error)
+		}
+	}
+
+	if(imagesToUpload.length > 0)
+		new Notice(`${successImageUploads} of ${imagesToUpload.length} images uploaded to ${settings.url}.`);
+}
 
 // ![hello](/kk8k/.k/k)
 // ![hello](_resources/AllClients-1.png)
@@ -354,89 +417,3 @@ const getImages = async ( content: string, vlt: Vault): Promise<ArrayBuffer[]> =
 // ![hello]()
 // ![AfterExclamation] (spaceAfter])
 // ![hello](/_kk8k/.k/k)
-}
-
-//https://github.com/alangrainger/share-note/blob/main/src/note.ts
-//https://github.com/requarks/wiki/discussions/6049
-//https://github.com/djmango/obsidian-transcription/blob/cf5029b7f9aca97396a3befa2f963f15c87fabca/main.ts
-const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
-	// Get the current filepath
-	const markdownFilePath = view.file.path;
-	console.log('\nSearching image files in vault : ' + markdownFilePath);
-
-	// Get all linked files in the markdown file
-	const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
-	console.log('\nimagesLinked: ' + filesLinked)
-
-	// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions
-	const imagesToUpload: TAbstractFile[] = [];
-	for (const linkedFilePath of filesLinked) {
-		const linkedFileExtension = linkedFilePath.split('.').pop();
-		if (linkedFileExtension === undefined || (!ImageFileFormats.some(ele => ele === linkedFileExtension))) {
-			console.log('Skipping ' + linkedFilePath + ' because the file extension is not an accepted file extension');
-			continue;
-		}
-
-		// We now know that the file extension is in the list of image file extensions
-		const linkedFile = vlt.getAbstractFileByPath(linkedFilePath);
-
-		// If the file is not found, we skip it
-		if (linkedFile === null) {
-			console.log('Could not find file ' + linkedFilePath);
-			continue;
-		}
-
-		//console.log('\nlinkedFileName: ' + linkedFile.name)
-
-		imagesToUpload.push(linkedFile)
-	}
-	// Now that we have all the images to upload, we can upload them
-	for (const fileToTranscribe of imagesToUpload) {
-		console.log('Uploading ' + fileToTranscribe.path);
-
-		// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
-		// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
-		// I believe this to be equivilent to the following curl command: curl --location --request POST 'http://djmango-bruh:9000/asr?task=transcribe&language=en' --form 'audio_file=@"test-vault/02 Files/Recording.webm"'
-
-		// Generate the form data payload boundry string, it can be arbitrary, I'm just using a random string here
-		// https://stackoverflow.com/questions/3508338/what-is-the-boundary-in-multipart-form-data
-		// https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
-		const N = 16 // The length of our random boundry string
-		const randomBoundryString = "djmangoBoundry" + Array(N + 1).join((Math.random().toString(36) + '00000000000000000').slice(2, 18)).slice(0, N)
-
-		// Construct the form data payload as a string
-		const form_data_payload_00 = `------${randomBoundryString}\r\nContent-Disposition: form-data; name=mediaUpload\r\n\r\n${JSON.stringify({ folderId: 0 })}`;
-		const form_data_payload_01 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename=${fileToTranscribe.name}\r\nContent-Type: image/jpeg\r\n\r\n`
-		const form_data_payload_end = `\r\n------${randomBoundryString}--`
-
-		// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
-		const form_data_payload_encoded_00 = new TextEncoder().encode(form_data_payload_00);
-		const form_data_payload_encoded_01 = new TextEncoder().encode(form_data_payload_01);
-		const data = new Blob([await vlt.adapter.readBinary(fileToTranscribe.path)]);
-		const form_data_payload_encoded_end = new TextEncoder().encode(form_data_payload_end);
-		const concatenated = await new Blob([form_data_payload_encoded_00, form_data_payload_encoded_01, await getBlobArrayBuffer(data), form_data_payload_encoded_end]).arrayBuffer()
-
-		// Now that we have the form data payload as an array buffer, we can pass it to requestURL
-		// We also need to set the content type to multipart/form-data and pass in the boundry string
-		const options: RequestUrlParam = {
-			method: 'POST',
-			url: `${settings.url}/u`,
-			contentType: `multipart/form-data; boundary=----${randomBoundryString}`,
-			headers: {
-				"Authorization": `Bearer ${settings.adminToken}`,
-			},
-			body: concatenated
-		};
-
-		requestUrl(options)
-			.then(response => {
-				if (response.status == 200) 
-					console.log('\nUpload success: ' + response.text)
-				else
-					console.log('\nUpload failed: ' + response.status)
-			})
-			//{"succeeded":false,"message":"Missing upload folder metadata."}
-			//.then(data => console.log('jsonData: ' + data))
-			.catch(error => console.error('requestUrlError: ' + error));
-	}
-}
