@@ -6,19 +6,20 @@ const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
 
 export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: SettingsProp) => {
-	const regex_ipAddress = /^(?:https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-	const regex_url = /^(https?:\/\/.)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/i
+	const regex_ipAddress = /^(https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+	const regex_url = /^(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/
+	const regex_uuid = /^[a-zA-Z0-9]{1,21}$/
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
-
+	
 	if (!regex_url.test(settings.url) && !regex_ipAddress.test(settings.url) ){ 
 		new Notice("Invalid Wikijs URL. Please check your URL settings.") 
 			return
 	} else if (settings.adminToken.length != 502) { 
 		new Notice("Invalid API Key. Please check your API Token setting.") 
 			return
-	} else if (metaMatter.uuid == undefined) { 
-		new Notice("uuid is missing from document front matter.") 
+	} else if (!regex_uuid.test(metaMatter.uuid)) { 
+		new Notice("uuid is invalid or missing from document front matter.") 
 			return
 	} else {
 		const UUIDTAG = `${UUID_TAG_HDR}${metaMatter.uuid}`
