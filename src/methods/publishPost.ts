@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { SettingsProp, DataProp, ImageFileFormats } from "../types";
+import { SettingsProp, DataProp, ImageFileFormats, UploadedImageMetadata } from "../types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
+import {sha256 } from "../crypto"
 
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
@@ -8,7 +9,7 @@ const UUID_TAG_HDR = "o2w-";
 export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: SettingsProp) => {
 	const regex_ipAddress = /^(https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 	const regex_url = /^(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/
-	const regex_uuid = /^[a-zA-Z0-9]{1,21}$/
+	const regex_uuid = /^[a-zA-Z0-9]{7,21}$/
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
 	
@@ -45,7 +46,10 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 
 		new Notice(`Connecting to ${settings.url} ...`);
 		
-		let parsedImageContent = parseLinkedImageElements((<DataProp>data).content)
+		let eme = await uploadLinkedImages(view, vlt, settings) 
+		//console.log('TABFile upped: ' + eme[0].TAbFile.path  + ' ext: ' + eme[0].ext)
+		
+		let parsedImageContent = parseLinkedImageElements((<DataProp>data).content, eme)
 		let parsedCalloutContent = parseCalloutElements(parsedImageContent)
 		const finishedContent = parsedCalloutContent
 			.replace(/\\/g, "/")
@@ -84,12 +88,15 @@ export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: Sett
 				},
 				body: reqBody
 			}
+
 			const result = await requestUrl(wikijsReq)
 			const json = result.json;
 			//console.log("\nContent upload response:\n" + JSON.stringify(result))
 			
-			if ((json?.data?.pages?.create?.responseResult.succeeded) || (json?.data?.pages?.update?.responseResult.succeeded)) 
-				await uploadLinkedImages(view, vlt, settings) 
+			// if ((json?.data?.pages?.create?.responseResult.succeeded) || (json?.data?.pages?.update?.responseResult.succeeded)){ 
+			// 	let eme = await uploadLinkedImages(view, vlt, settings) 
+			// 	console.log('TABFile upped: ' + eme[0].TAbFile.name  + ' ext: ' + eme[0].ext)
+			// }
 
 			if (json?.data?.pages?.create?.responseResult) {
 				if (json?.data.pages.create.responseResult.succeeded) {
@@ -179,8 +186,6 @@ const parseCalloutElements = (noteContent: string): string => {
 	let obsidMainTagIndex = 0
 	let wikiMainTagIndex = 0
 
-	//console.log("\ninput_lines:\n" + input_lines)
-
 	input_lines.forEach((noteContentLn, i, localArr) => {
 		noteContentLn += '\n'
 		output_lines[i] += '\n'
@@ -229,7 +234,6 @@ const parseCalloutElements = (noteContent: string): string => {
 	})
 
 	let parsedContent = output_lines.join("")
-
 	//console.log("\noutput lines:\n ", output_lines)
 	//console.log('\nNewContent:\n ' + parsedContent)
 
@@ -245,11 +249,13 @@ const parseCalloutElements = (noteContent: string): string => {
  * 
  * @private
  * @param {string} noteContent Content of an obsidian note
+ * @param {UploadedImageMetadata[]} upImagesMetadata Metadata for linked images uploaded to wikijs
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
-const parseLinkedImageElements = (noteContent: string): string  => {
-	const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w]+(?:[a-zA-Z0-9/._ -]*[\w])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
-	const re_imgDirectLink = /!?\[\[\/?[\w]+(?:[a-zA-Z0-9/._ -]*[\w])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
+const parseLinkedImageElements = (noteContent: string, upImagesMetadata: UploadedImageMetadata[]): string  => {
+	const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
+	const re_imgDirectLink = /!?\[\[\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
+    const re_Url = /(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
 	let contentLines = noteContent.split('\n');
     let parsedContentLines: string[] = []
     
@@ -259,36 +265,46 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 		if (!re_imgHyperLink.test(contentLn) && !re_imgDirectLink.test(contentLn)) {
 			continue
 		}
-      
-		//check if is a web image; also web image does not work inside of [[]] type link so don't have to check
-        if ( contentLn.match(/\]\(https?:\/\/[\w/.-]+\)/) && !contentLn.match(/\]\(https?:\/\/localhost\/\)/) ) {
-			//console.log('\nweb img: ' + ln);
+    
+		//check for link to a web image
+        if (re_Url.test(contentLn)) {
+			console.log('\nweb img: ' + contentLn);
 			continue
 	    }
-		console.log('\nlinked img found in content: ' + contentLn);
+		console.log('\nlinked img parsed: ' + contentLn);
 
 		let imgLink: string[]
 		let imgPath: string
 		let imgFname: string
 		let imgExt: string
 		let parsedLine: string
+		let wikijsImagePath: string
 
 		if(re_imgHyperLink.test(contentLn)){
 			imgLink = contentLn.split(/\]\(/)
 	        imgPath = imgLink[1].split(')')[0]
+            wikijsImagePath = generateWikijsImagePath(imgPath, upImagesMetadata)
 		    imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
 		    imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+			if(wikijsImagePath == ""){
+				wikijsImagePath = imgFname
+				console.log("\nwikijs file path not found: " + wikijsImagePath)
+			}
 			const re_imgPath = new RegExp("\\]\\("+imgPath);
-	        parsedLine = contentLn.replace(re_imgPath, "](/" + imgFname)
+	        parsedLine = contentLn.replace(re_imgPath, "](/" + wikijsImagePath)
 		} else {
 			imgLink = contentLn.split(/\[\[/)
 	        imgPath = imgLink[1].split(/\]\]/)[0]
+			wikijsImagePath = generateWikijsImagePath(imgPath, upImagesMetadata)
 		    imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
 		    imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
+			if(wikijsImagePath == ""){
+				wikijsImagePath = imgFname
+				console.log("\nwikijs file path not found: " + wikijsImagePath)
+			}
 			const re_imgPath = new RegExp("\\[\\["+imgPath+"\\]\\]");
-	        parsedLine = contentLn.replace(re_imgPath, "[image](/" + imgFname + ")")
+	        parsedLine = contentLn.replace(re_imgPath, "[image](/" + wikijsImagePath + ")")
 		}
-		//console.log('\nimgPath: '+ imgPath + ' imgFname:' + imgFname)
 		//console.log('\nParsed Ln: ' + parsedLine)
 
 		if (!ImageFileFormats.some(imgFmt => imgFmt === imgExt)){
@@ -300,12 +316,12 @@ const parseLinkedImageElements = (noteContent: string): string  => {
 	   parsedContentLines.push(parsedLine+'\n')
     }
 
-	//console.log("parsedContent: "+ parsedContentLines.join(""))
+	//console.log("parsedLinkedImageContent: "+ parsedContentLines.join(""))
 	return parsedContentLines.join("")
 }
 
 /**
- * Upload linked images in note to wikijs storage
+ * Upload linked images in obsidian note to wikijs storage
  * 
  * @private
  * @param {MarkdownView} view note mardown view
@@ -313,7 +329,7 @@ const parseLinkedImageElements = (noteContent: string): string  => {
  * @param {SettingsProp} settings app settings
  * @return {Promise<void>} 
  */
-const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<void> => {
+const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<UploadedImageMetadata[]> => {
 	// Get the current filepath
 	const markdownFilePath = view.file.path;
 	console.log('\nSearching image files in vault: ' + markdownFilePath);
@@ -339,15 +355,18 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 			console.log('Could not find file ' + linkedFilePath);
 			continue;
 		}
-		//console.log('\nlinkedFileName: ' + linkedFile.name)
 
 		imagesToUpload.push(linkedFile)
 	}
 
+	let upImages: UploadedImageMetadata[] = []
+	let successUpImages = 0 
 	// Now that we have all the images to upload, we can upload them
-	let successImageUploads = 0 
 	for (const imgToUpload of imagesToUpload) {
-		//console.log('Uploading ' + imgToUpload.path);
+		const imgToUploadArrBuffer = await vlt.adapter.readBinary(imgToUpload.path)
+		const imgToUploadSHA256 = await sha256(imgToUploadArrBuffer)
+		const imgToUploadWikijsFilename = imgToUploadSHA256 + '.' +  imgToUpload.name.split('.').pop()
+		//console.log('Uploading (' + imgToUploadWikijsFilename + ') ' + imgToUpload.path);
 
 		// This next block is a workaround to current Obsidian API limitations: requestURL only supports string data or an unnamed blob, not key-value formdata
 		// Essentially what we're doing here is constructing a multipart/form-data payload manually as a string and then passing it to requestURL
@@ -361,13 +380,13 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 
 		// Construct the form data payload as a string
 		const form_data_payload_00 = `------${randomBoundryString}\r\nContent-Disposition: form-data; name=mediaUpload\r\n\r\n${JSON.stringify({ folderId: 0 })}`;
-		const form_data_payload_01 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename=${imgToUpload.name}\r\nContent-Type: image/jpeg\r\n\r\n`
+		const form_data_payload_01 = `\r\n------${randomBoundryString}\r\nContent-Disposition: form-data; name="mediaUpload"; filename=${imgToUploadWikijsFilename}\r\nContent-Type: image/jpeg\r\n\r\n`
 		const form_data_payload_end = `\r\n------${randomBoundryString}--`
 
 		// Convert the form data payload to a blob by concatenating the pre_string, the file data, and the post_string, and then return the blob as an array buffer
 		const form_data_payload_encoded_00 = new TextEncoder().encode(form_data_payload_00);
 		const form_data_payload_encoded_01 = new TextEncoder().encode(form_data_payload_01);
-		const data = new Blob([await vlt.adapter.readBinary(imgToUpload.path)]);
+		const data = new Blob([imgToUploadArrBuffer]);
 		const form_data_payload_encoded_end = new TextEncoder().encode(form_data_payload_end);
 		const imageBlob = await new Blob([form_data_payload_encoded_00, form_data_payload_encoded_01, await getBlobArrayBuffer(data), form_data_payload_encoded_end]).arrayBuffer()
 
@@ -390,20 +409,38 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 			const result = await requestUrl(options)
 			if (result.status == 200) {
 				//success response from wikijs image upload is string "ok"
-				successImageUploads++
-				console.log('\nImage upload success: ' + imgToUpload.name)
+				successUpImages++
+				upImages.push({
+                    TAbFile: imgToUpload,
+					sha256: imgToUploadSHA256,
+					ext: imgToUpload.path.split('.').pop(),
+				})
+				console.log('\nImage upload success: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
 			} else {
 				//{"succeeded":false,"message":"Missing upload folder metadata."}
 				console.log("\nImage upload error resp:\n" + result.json)
 			}
 		} catch (error: any) {
-			console.log('\nImage upload failed: ' + imgToUpload.name)
+			console.log('\nImage upload failed: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
 			console.log('\nImage upload error:\n' + error)
 		}
 	}
 
 	if(imagesToUpload.length > 0)
-		new Notice(`${successImageUploads} of ${imagesToUpload.length} images uploaded to ${settings.url}.`);
+		new Notice(`${successUpImages} of ${imagesToUpload.length} images uploaded to ${settings.url}.`);
+
+	return upImages
+}
+
+const generateWikijsImagePath = (obsFilePath: string, uploadedImg: UploadedImageMetadata[]): string => {
+	let wikiFilePath = ""
+	uploadedImg.forEach((linkedImg) => {
+		if (obsFilePath.contains(linkedImg.TAbFile.path)){
+			wikiFilePath = linkedImg.sha256 + '.' + linkedImg.ext
+			return
+		}
+	})
+	return wikiFilePath
 }
 
 // ![hello](/kk8k/.k/k)

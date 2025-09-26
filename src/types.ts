@@ -1,3 +1,6 @@
+import { TAbstractFile } from "obsidian";
+
+
 export interface SettingsProp {
 	url: string;
 	adminToken: string;
@@ -15,3 +18,9 @@ export interface DataProp {
 /** Accepted Obsidian Image File Formats https://help.obsidian.md/file-formats
 */
 export const ImageFileFormats = ["jpg", "jpeg", "png", "bmp", "svg", "avif", "gif", "webp"]
+
+export interface UploadedImageMetadata {
+	TAbFile: TAbstractFile
+	sha256: string
+    ext: string
+}
