@@ -1,130 +1,123 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { SettingsProp, DataProp, ImageFileFormats, UploadedImageMetadata } from "../types";
+import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageMetadata } from "../types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
 import {sha256 } from "../crypto"
 
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
 
-export const publishPost = async (view: MarkdownView, vlt: Vault ,settings: SettingsProp) => {
+export const publishPost = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
 	const regex_ipAddress = /^(https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 	const regex_url = /^(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/
 	const regex_uuid = /^[a-zA-Z0-9]{7,21}$/
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
-	
-	if (!regex_url.test(settings.url) && !regex_ipAddress.test(settings.url) ){ 
-		new Notice("Invalid Wikijs URL. Please check your URL settings.") 
-			return
-	} else if (settings.adminToken.length != 502) { 
-		new Notice("Invalid API Key. Please check your API Token setting.") 
-			return
-	} else if (!regex_uuid.test(metaMatter.uuid)) { 
-		new Notice("uuid is invalid or missing from document front matter.") 
-			return
-	} else {
-		const UUIDTAG = `${UUID_TAG_HDR}${metaMatter.uuid}`
-		const data = matter(view.getViewData());
-		const noteID = await wikiPostExists(UUIDTAG, settings);
-		
-		const frontmatter = {
-			uuid: metaMatter.uuid,
-			path: metaMatter?.path || `obsidian/${metaMatter.uuid}`,
-			title: metaMatter?.title || view.file.basename,
-			tags: metaMatter?.tags || [UUIDTAG],
-			public: metaMatter?.public || false,
-			update: metaMatter?.update || false,
-			private: metaMatter?.private || false,
-			short_desc: metaMatter?.short_desc || "",
-			editor: metaMatter?.editor || "markdown",
-			locale: metaMatter?.locale || "en",
-		};
 
-		let tagArr = "["
-		frontmatter.tags.forEach((tag: string) => {tagArr += `\"${tag}\",`});
-		tagArr += `\"${UUIDTAG}\"]`
-
+	if (!regex_url.test(settings.url) && !regex_ipAddress.test(settings.url)) {
+		new Notice("Invalid Wikijs URL. Please check your URL setting.")
+		return
+	} else if (settings.adminToken.length != 502) {
+		new Notice("Invalid Wikijs API Key. Please check your API Key setting.")
+		return
+	} else if (!regex_uuid.test(metaMatter.uuid)) {
+		new Notice("uuid is invalid or missing from document front matter.")
+		return
+	} else
 		new Notice(`Connecting to ${settings.url} ...`);
-		
-		let eme = await uploadLinkedImages(view, vlt, settings) 
-		//console.log('TABFile upped: ' + eme[0].TAbFile.path  + ' ext: ' + eme[0].ext)
-		
-		let parsedImageContent = parseLinkedImageElements((<DataProp>data).content, eme)
-		let parsedCalloutContent = parseCalloutElements(parsedImageContent)
-		const finishedContent = parsedCalloutContent
+	
+	const UUIDTAG = `${UUID_TAG_HDR}${metaMatter.uuid}`
+	const data = matter(view.getViewData());
+	const noteID = await wikiPostExists(UUIDTAG, settings);
+
+	const frontmatter = {
+		uuid: metaMatter.uuid,
+		path: metaMatter?.path || `obsidian/${metaMatter.uuid}`,
+		title: metaMatter?.title || view.file.basename,
+		tags: metaMatter?.tags || [UUIDTAG],
+		public: metaMatter?.public || false,
+		update: metaMatter?.update || false,
+		private: metaMatter?.private || false,
+		short_desc: metaMatter?.short_desc || "",
+		editor: metaMatter?.editor || "markdown",
+		locale: metaMatter?.locale || "en",
+	};
+
+	let tagArr = "["
+	frontmatter.tags.forEach((tag: string) => { tagArr += `\"${tag}\",` });
+	tagArr += `\"${UUIDTAG}\"]`
+
+	let finishedContent = ""
+	if (!frontmatter.tags.contains("delete")) {
+		let upImagesMetadata = await uploadLinkedImages(view, vlt, settings)
+		let parsedContent = parseLinkedImageElements((<DataProp>data).content, upImagesMetadata)
+		parsedContent = parseCalloutElements(parsedContent)
+		finishedContent = parsedContent
 			.replace(/\\/g, "/")
 			.replace(/\"/g, "'")
 			.replace(/\n/g, "\\n")
 			.replace(/\r/g, "\\r")
 			.replace(/\t/g, "\\t")
+	}
 
-		let reqBody: string;
-		try {
-			if (frontmatter.tags.contains("delete")) {
-				if(noteID == -1){
+	let graphqlAPIbody: string;
+	try {
+		if (frontmatter.tags.contains("delete")) {
+			if (noteID == -1) {
 				new Notice(`Can not delete. Page does not exist!`)
 				return
 			}
-				reqBody = JSON.stringify({ query: `mutation {pages { delete( id: ${noteID} ) {responseResult { succeeded slug errorCode message } } } }` })
-			} else if (noteID == -1 || !frontmatter.update) {
-				reqBody = JSON.stringify({ query: `mutation {pages { create( path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${finishedContent}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
-			} else {
-				reqBody = JSON.stringify({ query: `mutation {pages { update( id: ${noteID} path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${finishedContent}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
-			}
-
-			const wikijsReq: RequestUrlParam = {
-				url: `${settings.url}/graphql`,
-				method: "POST",
-				contentType: "application/json",
-				headers: {
-					"Authorization": `Bearer ${settings.adminToken}`,
-					"Content-Type": "application/json",
-					"Accept": "application/json",
-					"Connection": "keep-alive",
-					"DNT": "1",
-					//"Access-Control-Allow-Methods": "POST",
-					"Accept-Encoding": "gzip, deflate, br",
-					//"Origin": "https://wiki.example.org",
-				},
-				body: reqBody
-			}
-
-			const result = await requestUrl(wikijsReq)
-			const json = result.json;
-			//console.log("\nContent upload response:\n" + JSON.stringify(result))
-			
-			// if ((json?.data?.pages?.create?.responseResult.succeeded) || (json?.data?.pages?.update?.responseResult.succeeded)){ 
-			// 	let eme = await uploadLinkedImages(view, vlt, settings) 
-			// 	console.log('TABFile upped: ' + eme[0].TAbFile.name  + ' ext: ' + eme[0].ext)
-			// }
-
-			if (json?.data?.pages?.create?.responseResult) {
-				if (json?.data.pages.create.responseResult.succeeded) {
-					new Notice(`Success -- Page ${settings.url}/${frontmatter.path} posted!`)
-				} else {
-					new Notice(`Error -- ${json?.data.pages.create.responseResult.slug} -- Code: ${json?.data.pages.create.responseResult.errorCode} -- Page not posted to wikijs!`)
-				}
-			} else if (json?.data?.pages?.update?.responseResult) {
-				if (json?.data.pages.update.responseResult.succeeded) {
-					new Notice(`Success -- Page ${settings.url}/${frontmatter.path} updated!`)
-				} else {
-					new Notice(`Error -- ${json?.data.pages.update.responseResult.slug} -- Code: ${json?.data.pages.update.responseResult.errorCode} -- Page not updated to wikijs!`)
-				}
-			} else if (json?.data?.pages?.delete?.responseResult) {
-				if (json?.data.pages.delete.responseResult.succeeded) {
-					new Notice(`Success -- Page ${settings.url}/${frontmatter.path} deleted!`)
-				} else {
-					new Notice(`Error -- ${json?.data.pages.delete.responseResult.slug} -- Code: ${json?.data.pages.delete.responseResult.errorCode} -- Page not deleted from wikijs!`)
-				}
-			} else if (json?.errors) {
-				new Notice(`Unexpected error: ${json.errors[0].message}`);
-			} else {
-				new Notice(`Unknown error status: ${result.status} -- Error text: ${result.text}`)
-			}
-			return
-		} catch (error: any) {
-			new Notice(`Can't connect to ${settings.url} API. Is the API URL and Admin API Key correct? ${error.name}: ${error.message}`)
+			graphqlAPIbody = JSON.stringify({ query: `mutation {pages { delete( id: ${noteID} ) {responseResult { succeeded slug errorCode message } } } }` })
+		} else if (noteID == -1 || !frontmatter.update) {
+			graphqlAPIbody = JSON.stringify({ query: `mutation {pages { create( path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${finishedContent}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
+		} else {
+			graphqlAPIbody = JSON.stringify({ query: `mutation {pages { update( id: ${noteID} path: "${frontmatter.path.replace(/\\/g, "/")}" title: "${frontmatter.title.replace(/\\/g, "/")}" description: "${frontmatter.short_desc.replace(/\\/g, "/")}" content: "${finishedContent}" editor: "${frontmatter.editor}" isPublished: ${frontmatter.public} isPrivate: ${frontmatter.private} tags: ${tagArr} locale: "${frontmatter.locale}" ) {responseResult { succeeded slug errorCode message } } }}` })
 		}
+
+		const wikijsReq: RequestUrlParam = {
+			url: `${settings.url}/graphql`,
+			method: "POST",
+			contentType: "application/json",
+			headers: {
+				"Authorization": `Bearer ${settings.adminToken}`,
+				"Content-Type": "application/json",
+				"Accept": "application/json",
+				"Connection": "keep-alive",
+				"DNT": "1",
+				//"Access-Control-Allow-Methods": "POST",
+				"Accept-Encoding": "gzip, deflate, br",
+				//"Origin": "https://wiki.example.org",
+			},
+			body: graphqlAPIbody
+		}
+
+		const result = await requestUrl(wikijsReq)
+		const json = result.json;
+		//console.log("\nContent upload response:\n" + JSON.stringify(result))
+		if (json?.data?.pages?.create?.responseResult) {
+			if (json?.data.pages.create.responseResult.succeeded) {
+				new Notice(`Success -- Page ${settings.url}/${frontmatter.path} posted!`)
+			} else {
+				new Notice(`Error -- ${json?.data.pages.create.responseResult.slug} -- Code: ${json?.data.pages.create.responseResult.errorCode} -- Page not posted to wikijs!`)
+			}
+		} else if (json?.data?.pages?.update?.responseResult) {
+			if (json?.data.pages.update.responseResult.succeeded) {
+				new Notice(`Success -- Page ${settings.url}/${frontmatter.path} updated!`)
+			} else {
+				new Notice(`Error -- ${json?.data.pages.update.responseResult.slug} -- Code: ${json?.data.pages.update.responseResult.errorCode} -- Page not updated to wikijs!`)
+			}
+		} else if (json?.data?.pages?.delete?.responseResult) {
+			if (json?.data.pages.delete.responseResult.succeeded) {
+				new Notice(`Success -- Page ${settings.url}/${frontmatter.path} deleted!`)
+			} else {
+				new Notice(`Error -- ${json?.data.pages.delete.responseResult.slug} -- Code: ${json?.data.pages.delete.responseResult.errorCode} -- Page not deleted from wikijs!`)
+			}
+		} else if (json?.errors) {
+			new Notice(`Unexpected error: ${json.errors[0].message}`);
+		} else {
+			new Notice(`Unknown error status: ${result.status} -- Error text: ${result.text}`)
+		}
+	} catch (error: any) {
+		new Notice(`Can't connect to ${settings.url} API. Is the API URL and Admin API Key correct? ${error.name}: ${error.message}`)
 	}
 };
 
@@ -234,8 +227,8 @@ const parseCalloutElements = (noteContent: string): string => {
 	})
 
 	let parsedContent = output_lines.join("")
-	//console.log("\noutput lines:\n ", output_lines)
-	//console.log('\nNewContent:\n ' + parsedContent)
+	//console.log("\nparsed content lines:\n ", output_lines)
+	//console.log('\nparsed content:\n ' + parsedContent)
 
 	parsedContent = parsedContent.replace(/^ {0,3}> ?\[\!info\]/gmi,"> {.is-info}")
 	.replace(/^ {0,3}> ?\[\!warning\]/gmi,"> {.is-warning}")
@@ -249,10 +242,10 @@ const parseCalloutElements = (noteContent: string): string => {
  * 
  * @private
  * @param {string} noteContent Content of an obsidian note
- * @param {UploadedImageMetadata[]} upImagesMetadata Metadata for linked images uploaded to wikijs
+ * @param {VaultImageMetadata[]} upImagesMetadata Metadata for linked images uploaded to wikijs
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
-const parseLinkedImageElements = (noteContent: string, upImagesMetadata: UploadedImageMetadata[]): string  => {
+const parseLinkedImageElements = (noteContent: string, upImagesMetadata: VaultImageMetadata[]): string  => {
 	const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
 	const re_imgDirectLink = /!?\[\[\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
     const re_Url = /(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
@@ -266,54 +259,57 @@ const parseLinkedImageElements = (noteContent: string, upImagesMetadata: Uploade
 			continue
 		}
     
-		//check for link to a web image
+		//check if link to a web image
         if (re_Url.test(contentLn)) {
-			console.log('\nweb img: ' + contentLn);
+			console.log('\nSkipping linked web image content parsing: ' + contentLn);
 			continue
 	    }
-		console.log('\nlinked img parsed: ' + contentLn);
+		console.log('\nLinked image content found for parsing: ' + contentLn);
 
-		let imgLink: string[]
-		let imgPath: string
-		let imgFname: string
-		let imgExt: string
+		let obsImgLink: string[]
+		let obsImgPath: string
+		let obsImgFname: string
+		let obsImgExt: string
 		let parsedLine: string
 		let wikijsImagePath: string
 
-		if(re_imgHyperLink.test(contentLn)){
-			imgLink = contentLn.split(/\]\(/)
-	        imgPath = imgLink[1].split(')')[0]
-            wikijsImagePath = generateWikijsImagePath(imgPath, upImagesMetadata)
-		    imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
-		    imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
-			if(wikijsImagePath == ""){
-				wikijsImagePath = imgFname
-				console.log("\nwikijs file path not found: " + wikijsImagePath)
+		const validImagePath = function(): boolean {
+			obsImgFname = obsImgPath.split('/')[obsImgPath.split('/').length - 1]
+			obsImgExt = obsImgFname.split('.')[obsImgFname.split('.').length - 1]
+			if (!VaultImageFileFormats.some(imgFmt => imgFmt === obsImgExt)) {
+				console.log('\nBad parsed image format: ' + obsImgFname)
+				return false
 			}
-			const re_imgPath = new RegExp("\\]\\("+imgPath);
+			wikijsImagePath = generateWikijsImagePath(obsImgPath, upImagesMetadata)
+			if (wikijsImagePath == "") {
+				wikijsImagePath = obsImgFname
+			}
+			return true
+		}
+
+		if(re_imgHyperLink.test(contentLn)){
+			obsImgLink = contentLn.split(/\]\(/)
+	        obsImgPath = obsImgLink[1].split(')')[0]
+
+			if (!validImagePath())
+				continue
+
+			const re_imgPath = new RegExp("\\]\\("+obsImgPath);
 	        parsedLine = contentLn.replace(re_imgPath, "](/" + wikijsImagePath)
 		} else {
-			imgLink = contentLn.split(/\[\[/)
-	        imgPath = imgLink[1].split(/\]\]/)[0]
-			wikijsImagePath = generateWikijsImagePath(imgPath, upImagesMetadata)
-		    imgFname = imgPath.split('/')[imgPath.split('/').length - 1]
-		    imgExt = imgFname.split('.')[imgFname.split('.').length - 1]
-			if(wikijsImagePath == ""){
-				wikijsImagePath = imgFname
-				console.log("\nwikijs file path not found: " + wikijsImagePath)
-			}
-			const re_imgPath = new RegExp("\\[\\["+imgPath+"\\]\\]");
+			obsImgLink = contentLn.split(/\[\[/)
+	        obsImgPath = obsImgLink[1].split(/\]\]/)[0]
+
+			if (!validImagePath())
+				continue
+
+			const re_imgPath = new RegExp("\\[\\["+obsImgPath+"\\]\\]");
 	        parsedLine = contentLn.replace(re_imgPath, "[image](/" + wikijsImagePath + ")")
 		}
-		//console.log('\nParsed Ln: ' + parsedLine)
-
-		if (!ImageFileFormats.some(imgFmt => imgFmt === imgExt)){
-			console.log('\nBad image format: ' + imgFname)
-			continue
-		}
-	   
-	   parsedContentLines.pop()
-	   parsedContentLines.push(parsedLine+'\n')
+		
+	    //console.log('\nParsed linked image line: ' + parsedLine)
+	    parsedContentLines.pop()
+	    parsedContentLines.push(parsedLine+'\n')
     }
 
 	//console.log("parsedLinkedImageContent: "+ parsedContentLines.join(""))
@@ -327,22 +323,22 @@ const parseLinkedImageElements = (noteContent: string, upImagesMetadata: Uploade
  * @param {MarkdownView} view note mardown view
  * @param {Vault} vlt vault containing notes
  * @param {SettingsProp} settings app settings
- * @return {Promise<void>} 
+ * @return {Promise<VaultImageMetadata[]>} 
  */
-const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<UploadedImageMetadata[]> => {
+const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<VaultImageMetadata[]> => {
 	// Get the current filepath
 	const markdownFilePath = view.file.path;
 	console.log('\nSearching image files in vault: ' + markdownFilePath);
 
 	// Get all linked files in the markdown file
 	const filesLinked = Object.keys(view.app.metadataCache.resolvedLinks[markdownFilePath]);
-	console.log('\nimagesLinked: ' + filesLinked)
+	console.log('\nLinked vault images: ' + filesLinked)
 
 	// Now that we have all the files linked in the markdown file, we need to filter them by the file extensions
 	const imagesToUpload: TAbstractFile[] = [];
 	for (const linkedFilePath of filesLinked) {
 		const linkedFileExtension = linkedFilePath.split('.').pop();
-		if (linkedFileExtension === undefined || (!ImageFileFormats.some(imageFormat => imageFormat === linkedFileExtension))) {
+		if (linkedFileExtension === undefined || (!VaultImageFileFormats.some(imageFormat => imageFormat === linkedFileExtension))) {
 			console.log('Skipping ' + linkedFilePath + ' because the file extension is not an accepted');
 			continue;
 		}
@@ -352,14 +348,14 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 
 		// If the file is not found, we skip it
 		if (linkedFile === null) {
-			console.log('Could not find file ' + linkedFilePath);
+			console.log('Could not find file vault image ' + linkedFilePath);
 			continue;
 		}
 
 		imagesToUpload.push(linkedFile)
 	}
 
-	let upImages: UploadedImageMetadata[] = []
+	let upImages: VaultImageMetadata[] = []
 	let successUpImages = 0 
 	// Now that we have all the images to upload, we can upload them
 	for (const imgToUpload of imagesToUpload) {
@@ -415,14 +411,15 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 					sha256: imgToUploadSHA256,
 					ext: imgToUpload.path.split('.').pop(),
 				})
-				console.log('\nImage upload success: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
+				//console.log('\nImage upload success: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
 			} else {
 				//{"succeeded":false,"message":"Missing upload folder metadata."}
-				console.log("\nImage upload error resp:\n" + result.json)
+				console.log('\nVault image upload error: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
+				console.log("\nVault image upload error resp:\n" + result.json)
 			}
 		} catch (error: any) {
-			console.log('\nImage upload failed: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
-			console.log('\nImage upload error:\n' + error)
+			console.log('\nVault image upload failed: (' + imgToUploadWikijsFilename + ') - ' + imgToUpload.path)
+			console.log('\nVault image upload failed:\n' + error)
 		}
 	}
 
@@ -432,15 +429,23 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 	return upImages
 }
 
-const generateWikijsImagePath = (obsFilePath: string, uploadedImg: UploadedImageMetadata[]): string => {
-	let wikiFilePath = ""
-	uploadedImg.forEach((linkedImg) => {
-		if (obsFilePath.contains(linkedImg.TAbFile.path)){
-			wikiFilePath = linkedImg.sha256 + '.' + linkedImg.ext
+
+const generateWikijsImagePath = (obsContentImageFilePath: string, uploadedVaultImages: VaultImageMetadata[]): string => {
+	let wikiImgFilePath = ""
+
+	uploadedVaultImages.forEach(upVaultImage => {
+		let upVaultImageFilePathArr = upVaultImage.TAbFile.path.split('/')
+		let obsContentImagePathArr = obsContentImageFilePath.split('/')
+
+		if (obsContentImagePathArr.join("") === upVaultImageFilePathArr.join("")) {
+			wikiImgFilePath = upVaultImage.sha256 + '.' + upVaultImage.ext
+			//console.log("\nwikijs file path created: " + obsContentImageFilePath + ' - hash: ' +  wikiImgFilePath)
 			return
 		}
 	})
-	return wikiFilePath
+
+	console.log("\nwikijs file path not generated for: " + obsContentImageFilePath)
+	return wikiImgFilePath
 }
 
 // ![hello](/kk8k/.k/k)

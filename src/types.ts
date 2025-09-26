@@ -17,9 +17,9 @@ export interface DataProp {
 
 /** Accepted Obsidian Image File Formats https://help.obsidian.md/file-formats
 */
-export const ImageFileFormats = ["jpg", "jpeg", "png", "bmp", "svg", "avif", "gif", "webp"]
+export const VaultImageFileFormats = ["jpg", "jpeg", "png", "bmp", "svg", "avif", "gif", "webp"]
 
-export interface UploadedImageMetadata {
+export interface VaultImageMetadata {
 	TAbFile: TAbstractFile
 	sha256: string
     ext: string
