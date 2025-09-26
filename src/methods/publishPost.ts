@@ -444,22 +444,9 @@ const generateWikijsImagePath = (obsContentImageFilePath: string, uploadedVaultI
 		}
 	})
 
-	console.log("\nwikijs file path not generated for: " + obsContentImageFilePath)
+	if (wikiImgFilePath == "")
+		console.log("\nwikijs file path not generated for: " + obsContentImageFilePath)
 	return wikiImgFilePath
 }
 
-// ![hello](/kk8k/.k/k)
-// ![hello](_resources/AllClients-1.png)
-// ![123](_resources/AllClients-1.png)
-// [hellP](_resources/AllClients-1.png)
-// ![](_resources/AllClients-1.png)
-// ![hello](https://pages.expat.com)
-// ![hello](http://pages.expat.com)
-// ![hello](http://localhost/)
-// ![hello](http://localhost)
-//     ![hello](_resources/AllClients-1.png)
-// ! [spaceAfterExclmation](kk8k)
-// ![hello]()
-// ![AfterExclamation] (spaceAfter])
-// ![hello](/_kk8k/.k/k)
 
