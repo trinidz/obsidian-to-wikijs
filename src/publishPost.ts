@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageFileMetadata } from "../types";
+import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageFileMetadata } from "./types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
-import {sha256 } from "../crypto"
+import {sha256 } from "./crypto"
 
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
@@ -122,7 +122,7 @@ export const publishPost = async (view: MarkdownView, vlt: Vault, settings: Sett
 };
 
 /**
- * Convert Obsidian style callout elements to Wikijs style
+ * Determine if a wikijs post exists 
  * 
  * @private
  * @param {string} uuidTag uuid tag of an obsidian note
@@ -262,10 +262,10 @@ const parseContentLinkedImages = (noteContent: string, upImagesMetadata: VaultIm
     
 		//check if link to a web image
         if (re_Url.test(contentLn)) {
-			console.log('\nSkipping linked web image content parsing: ' + contentLn);
+			console.log('\nSkipping linked web image content: ' + contentLn);
 			continue
 	    }
-		console.log('\nLinked image content found for parsing: ' + contentLn);
+		console.log('\nLinked image content found: ' + contentLn);
 
 		let obsImgLink: string[]
 		let obsImgPath: string
@@ -407,7 +407,7 @@ const uploadLinkedVaultImages = async (view: MarkdownView, vlt: Vault, settings:
 				//success response from wikijs image upload is string "ok"
 				successUpImages++
 				upImages.push({
-                    TAbFile: imgToUpload,
+                    abstractFile: imgToUpload,
 					sha256: imgToUploadSHA256,
 					ext: imgToUpload.path.split('.').pop(),
 				})
@@ -438,16 +438,16 @@ const uploadLinkedVaultImages = async (view: MarkdownView, vlt: Vault, settings:
  * @return {string} 
  */
 const createWikijsImageFilePath = (contentImageFilePath: string, vaultImageMetadatas: VaultImageFileMetadata[]): string => {	
-	const pathlengths = vaultImageMetadatas.map(a => a.TAbFile.path.split('/').length)
+	const pathlengths = vaultImageMetadatas.map(a => a.abstractFile.path.split('/').length)
     const index = pathlengths.indexOf(Math.max(...pathlengths));
-	const maxShifts = vaultImageMetadatas[index].TAbFile.path.split('/').length
+	const maxShifts = vaultImageMetadatas[index].abstractFile.path.split('/').length
 	
 	let wikiImgFilePath = ""
 	let cImageFilePathArr = contentImageFilePath.split('/')
 
 	for (let numShifts = 0; numShifts < maxShifts; numShifts++) {
 		vaultImageMetadatas.forEach(vImageMetadata => {
-			let vImageFilePathArr = vImageMetadata.TAbFile.path.split('/')
+			let vImageFilePathArr = vImageMetadata.abstractFile.path.split('/')
 			if (numShifts < vImageFilePathArr.length) {
 				for (let i = 0; i < numShifts; i++) {
 					vImageFilePathArr.shift()

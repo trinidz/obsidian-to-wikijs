@@ -2,7 +2,7 @@ import { MarkdownFileInfo, MarkdownView, Notice, Plugin } from "obsidian";
 
 import { SettingsDefault, SettingsProp } from "./types";
 import { SettingTab } from "./settings";
-import { publishPost } from "./methods/publishPost";
+import { publishPost } from "./publishPost";
 export default class WikijsPublish extends Plugin {
 	settings: SettingsProp;
 

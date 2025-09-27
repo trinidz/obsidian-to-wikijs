@@ -20,7 +20,7 @@ export interface DataProp {
 export const VaultImageFileFormats = ["jpg", "jpeg", "png", "bmp", "svg", "avif", "gif", "webp"]
 
 export interface VaultImageFileMetadata {
-	TAbFile: TAbstractFile
+	abstractFile: TAbstractFile
 	sha256: string
     ext: string
 }
