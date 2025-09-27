@@ -430,22 +430,34 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 }
 
 
-const generateWikijsImagePath = (obsContentImageFilePath: string, uploadedVaultImages: VaultImageMetadata[]): string => {
+const generateWikijsImagePath = (contentImageFilePath: string, vaultImageMetadatas: VaultImageMetadata[]): string => {	
+	const pathlengths = vaultImageMetadatas.map(a => a.TAbFile.path.split('/').length)
+    const index = pathlengths.indexOf(Math.max(...pathlengths));
+	const maxShifts = vaultImageMetadatas[index].TAbFile.path.split('/').length
+	
 	let wikiImgFilePath = ""
+	let cImageFilePathArr = contentImageFilePath.split('/')
 
-	uploadedVaultImages.forEach(upVaultImage => {
-		let upVaultImageFilePathArr = upVaultImage.TAbFile.path.split('/')
-		let obsContentImagePathArr = obsContentImageFilePath.split('/')
+	for (let numShifts = 0; numShifts < maxShifts; numShifts++) {
+		vaultImageMetadatas.forEach(vImageMetadata => {
+			let vImageFilePathArr = vImageMetadata.TAbFile.path.split('/')
+			if (numShifts < vImageFilePathArr.length) {
+				for (let i = 0; i < numShifts; i++) {
+					vImageFilePathArr.shift()
+				}
 
-		if (obsContentImagePathArr.join("") === upVaultImageFilePathArr.join("")) {
-			wikiImgFilePath = upVaultImage.sha256 + '.' + upVaultImage.ext
-			//console.log("\nwikijs file path created: " + obsContentImageFilePath + ' - hash: ' +  wikiImgFilePath)
-			return
-		}
-	})
+				if (cImageFilePathArr.join("") === vImageFilePathArr.join("")) {
+					wikiImgFilePath = vImageMetadata.sha256 + '.' + vImageMetadata.ext
+					console.log("\nwikijs file path created: " + contentImageFilePath + ' - hash: ' + wikiImgFilePath)
+					numShifts = maxShifts
+					return
+				}
+			} 
+		})
+	}
 
 	if (wikiImgFilePath == "")
-		console.log("\nwikijs file path not generated for: " + obsContentImageFilePath)
+		console.log("\nwikijs file path not generated for: " + contentImageFilePath)
 	return wikiImgFilePath
 }
 
