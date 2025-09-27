@@ -1,6 +1,6 @@
 import { MarkdownFileInfo, MarkdownView, Notice, Plugin } from "obsidian";
 
-import { DEFAULT_SETTINGS, SettingsProp } from "./types";
+import { SettingsDefault, SettingsProp } from "./types";
 import { SettingTab } from "./settings";
 import { publishPost } from "./methods/publishPost";
 export default class WikijsPublish extends Plugin {
@@ -47,7 +47,7 @@ export default class WikijsPublish extends Plugin {
 	async loadSettings() {
 		this.settings = Object.assign(
 			{},
-			DEFAULT_SETTINGS,
+			SettingsDefault,
 			await this.loadData()
 		);
 	}

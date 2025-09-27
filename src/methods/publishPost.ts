@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageMetadata } from "../types";
+import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageFileMetadata } from "../types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
 import {sha256 } from "../crypto"
 
@@ -48,9 +48,9 @@ export const publishPost = async (view: MarkdownView, vlt: Vault, settings: Sett
 
 	let finishedContent = ""
 	if (!frontmatter.tags.contains("delete")) {
-		let upImagesMetadata = await uploadLinkedImages(view, vlt, settings)
-		let parsedContent = parseLinkedImageElements((<DataProp>data).content, upImagesMetadata)
-		parsedContent = parseCalloutElements(parsedContent)
+		let upImagesMetadata = await uploadLinkedVaultImages(view, vlt, settings)
+		let parsedContent = parseContentLinkedImages((<DataProp>data).content, upImagesMetadata)
+		parsedContent = parseContentCallouts(parsedContent)
 		finishedContent = parsedContent
 			.replace(/\\/g, "/")
 			.replace(/\"/g, "'")
@@ -121,7 +121,15 @@ export const publishPost = async (view: MarkdownView, vlt: Vault, settings: Sett
 	}
 };
 
-const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
+/**
+ * Convert Obsidian style callout elements to Wikijs style
+ * 
+ * @private
+ * @param {string} uuidTag uuid tag of an obsidian note
+ * @param {string} settings app settings
+ * @return {Promise<number>} wikijs note id of the obsidian note; returns -1 if not found
+ */
+const wikiPostExists = async (uuidTag: string, settings: SettingsProp): Promise<number> => {
 	let noteId: number = -1;
 	try {
 		const wikijsReq: RequestUrlParam = {
@@ -157,20 +165,13 @@ const wikiPostExists = async (uuidTag: string, settings: SettingsProp) => {
 
 /**
  * Convert Obsidian style callout elements to Wikijs style
- * - This method converts the 3 types of obsidian callout elements
- *  (info, warning and danger) that are compatible with wikijs.
- * 
- * > [!Info]
- * > example obsidian style callout
- * 
- * > example wikijs style callout
- * > {.is-info} 
+ * - 3 obsidian callout elements (info, warning and danger) are compatible with wikijs.
  * 
  * @private
  * @param {string} noteContent Content of an obsidian note
  * @return {string} Content of the obsidian note with callouts converted to wikijs style 
  */
-const parseCalloutElements = (noteContent: string): string => {
+const parseContentCallouts = (noteContent: string): string => {
 	const regex_obsCalloutTags = /^ {0,3}> ?\[\!info\][ ]*[\n]|^ {0,3}> ?\[\!warning\][ ]*[\n]|^ {0,3}> ?\[\!danger\][ ]*[\n]/i
 	const calloutTagLineNums: number[] = []
 	const input_lines = noteContent.split('\n')
@@ -238,14 +239,14 @@ const parseCalloutElements = (noteContent: string): string => {
 }
 
 /**
- * Convert Obsidian linked image storage file paths to Wikijs storage file paths
+ * Convert Obsidian linked image file paths to Wikijs storage file paths
  * 
  * @private
  * @param {string} noteContent Content of an obsidian note
- * @param {VaultImageMetadata[]} upImagesMetadata Metadata for linked images uploaded to wikijs
+ * @param {VaultImageFileMetadata[]} upImagesMetadata Metadata for linked images uploaded to wikijs
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
-const parseLinkedImageElements = (noteContent: string, upImagesMetadata: VaultImageMetadata[]): string  => {
+const parseContentLinkedImages = (noteContent: string, upImagesMetadata: VaultImageFileMetadata[]): string  => {
 	const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
 	const re_imgDirectLink = /!?\[\[\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
     const re_Url = /(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
@@ -280,7 +281,7 @@ const parseLinkedImageElements = (noteContent: string, upImagesMetadata: VaultIm
 				console.log('\nBad parsed image format: ' + obsImgFname)
 				return false
 			}
-			wikijsImagePath = generateWikijsImagePath(obsImgPath, upImagesMetadata)
+			wikijsImagePath = createWikijsImageFilePath(obsImgPath, upImagesMetadata)
 			if (wikijsImagePath == "") {
 				wikijsImagePath = obsImgFname
 			}
@@ -312,7 +313,6 @@ const parseLinkedImageElements = (noteContent: string, upImagesMetadata: VaultIm
 	    parsedContentLines.push(parsedLine+'\n')
     }
 
-	//console.log("parsedLinkedImageContent: "+ parsedContentLines.join(""))
 	return parsedContentLines.join("")
 }
 
@@ -320,12 +320,12 @@ const parseLinkedImageElements = (noteContent: string, upImagesMetadata: VaultIm
  * Upload linked images in obsidian note to wikijs storage
  * 
  * @private
- * @param {MarkdownView} view note mardown view
+ * @param {MarkdownView} view note markdown view
  * @param {Vault} vlt vault containing notes
  * @param {SettingsProp} settings app settings
- * @return {Promise<VaultImageMetadata[]>} 
+ * @return {Promise<VaultImageFileMetadata[]>} 
  */
-const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<VaultImageMetadata[]> => {
+const uploadLinkedVaultImages = async (view: MarkdownView, vlt: Vault, settings: SettingsProp): Promise<VaultImageFileMetadata[]> => {
 	// Get the current filepath
 	const markdownFilePath = view.file.path;
 	console.log('\nSearching image files in vault: ' + markdownFilePath);
@@ -355,7 +355,7 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 		imagesToUpload.push(linkedFile)
 	}
 
-	let upImages: VaultImageMetadata[] = []
+	let upImages: VaultImageFileMetadata[] = []
 	let successUpImages = 0 
 	// Now that we have all the images to upload, we can upload them
 	for (const imgToUpload of imagesToUpload) {
@@ -429,8 +429,15 @@ const uploadLinkedImages = async (view: MarkdownView, vlt: Vault, settings: Sett
 	return upImages
 }
 
-
-const generateWikijsImagePath = (contentImageFilePath: string, vaultImageMetadatas: VaultImageMetadata[]): string => {	
+/**
+ * Create a file path for image in wikijs storage
+ * 
+ * @private
+ * @param {string} contentImageFilePath image file path in obsidian note
+ * @param {Vault} vaultImageMetadatas metadata of vault linked images
+ * @return {string} 
+ */
+const createWikijsImageFilePath = (contentImageFilePath: string, vaultImageMetadatas: VaultImageFileMetadata[]): string => {	
 	const pathlengths = vaultImageMetadatas.map(a => a.TAbFile.path.split('/').length)
     const index = pathlengths.indexOf(Math.max(...pathlengths));
 	const maxShifts = vaultImageMetadatas[index].TAbFile.path.split('/').length
@@ -448,7 +455,7 @@ const generateWikijsImagePath = (contentImageFilePath: string, vaultImageMetadat
 
 				if (cImageFilePathArr.join("") === vImageFilePathArr.join("")) {
 					wikiImgFilePath = vImageMetadata.sha256 + '.' + vImageMetadata.ext
-					console.log("\nwikijs file path created: " + contentImageFilePath + ' - hash: ' + wikiImgFilePath)
+					//console.log("\nwikijs file path created: " + contentImageFilePath + ' - hash: ' + wikiImgFilePath)
 					numShifts = maxShifts
 					return
 				}

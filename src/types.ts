@@ -6,7 +6,7 @@ export interface SettingsProp {
 	adminToken: string;
 }
 
-export const DEFAULT_SETTINGS: SettingsProp = {
+export const SettingsDefault: SettingsProp = {
 	url: "",
 	adminToken: "",
 };
@@ -19,7 +19,7 @@ export interface DataProp {
 */
 export const VaultImageFileFormats = ["jpg", "jpeg", "png", "bmp", "svg", "avif", "gif", "webp"]
 
-export interface VaultImageMetadata {
+export interface VaultImageFileMetadata {
 	TAbFile: TAbstractFile
 	sha256: string
     ext: string
