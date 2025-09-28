@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageFileMetadata } from "./types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
-import {sha256 } from "./crypto"
+import { sha256 } from "./crypto"
 
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
@@ -246,80 +246,11 @@ const parseContentCallouts = (noteContent: string): string => {
  * @param {VaultImageFileMetadata[]} upImagesMetadata Metadata for linked images uploaded to wikijs
  * @return {string} Content of the obsidian note with linked image obsidian storage file paths converted to wikijs image storage file paths 
  */
-const parseContentLinkedImagesOld = (noteContent: string, upImagesMetadata: VaultImageFileMetadata[]): string  => {
-	const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
-	const re_imgDirectLink = /!?\[\[\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
-	const re_Url = /(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
-	let contentLines = noteContent.split('\n');
-    let parsedContentLines: string[] = []
-    
-	//assumes only one image link per line
-    for (const contentLn of contentLines) {
-		parsedContentLines.push(contentLn + '\n')
-
-		if (!re_imgHyperLink.test(contentLn) && !re_imgDirectLink.test(contentLn)) {
-			continue
-		}
-    
-		//check if link to a web image
-        if (re_Url.test(contentLn)) {
-			console.log('\nSkipping linked web image content: ' + contentLn);
-			continue
-	    }
-		console.log('\nLinked image content found: ' + contentLn);
-
-		let obsImgLink: string[]
-		let obsImgPath: string
-		let obsImgFname: string
-		let obsImgExt: string
-		let parsedLine: string
-		let wikijsImagePath: string
-
-		const validImagePath = function(): boolean {
-			obsImgFname = obsImgPath.split('/')[obsImgPath.split('/').length - 1]
-			obsImgExt = obsImgFname.split('.')[obsImgFname.split('.').length - 1]
-			if (!VaultImageFileFormats.some(imgFmt => imgFmt === obsImgExt)) {
-				console.log('\nBad parsed image format: ' + obsImgFname)
-				return false
-			}
-			wikijsImagePath = createWikijsImageFilePath(obsImgPath, upImagesMetadata)
-			if (wikijsImagePath == "") {
-				wikijsImagePath = obsImgFname
-			}
-			return true
-		}
-
-		if(re_imgHyperLink.test(contentLn)){
-			obsImgLink = contentLn.split(/\]\(/)
-	        obsImgPath = obsImgLink[1].split(')')[0]
-
-			if (!validImagePath())
-				continue
-
-			const re_imgPath = new RegExp("\\]\\("+obsImgPath);
-	        parsedLine = contentLn.replace(re_imgPath, "](/" + wikijsImagePath)
-		} else {
-			obsImgLink = contentLn.split(/\[\[/)
-	        obsImgPath = obsImgLink[1].split(/\]\]/)[0]
-
-			if (!validImagePath())
-				continue
-
-			const re_imgPath = new RegExp("\\[\\["+obsImgPath+"\\]\\]");
-	        parsedLine = contentLn.replace(re_imgPath, "[image](/" + wikijsImagePath + ")")
-		}
-		
-	    //console.log('\nParsed linked image line: ' + parsedLine)
-	    parsedContentLines.pop()
-	    parsedContentLines.push(parsedLine+'\n')
-    }
-
-	return parsedContentLines.join("")
-}
-
 const parseContentLinkedImages = (noteContent: string, upImagesMetadata: VaultImageFileMetadata[]): string  => {
-    const re_matchLinks = /(?<=!?\[\[)\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+(?=\]\])|(?<=!?\[[^\r\n\(\)\[\]]+\]\()\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+(?=\))/
-	const re_Url = /(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
+    const re_matchLinks = /(?<=!?\[\[)\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+(?=\]\])|(?<=!?\[[^\r\n\(\)\[\]]+\]\()\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+(?=\))/g
+	const re_url = /(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
+	//const re_imgHyperLink = /!?\[[^\r\n\(\)\[\]]+\]\(\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\)/i; //regex to find images in content included as hyperlinks !(myImageHyperLinkAlias)[pathToImageInVault]
+	//const re_imgDirectLink = /!?\[\[\/?[\w-]+(?:[\w/. -]*[\w-])?\.[a-zA-Z0-9]+\]\]/i; //regex to find images in content included as direct links ![[pathToImageInVault]] 
 	let contentLines = noteContent.split('\n');
     let parsedContentLines: string[] = []
     
@@ -327,42 +258,35 @@ const parseContentLinkedImages = (noteContent: string, upImagesMetadata: VaultIm
 		parsedContentLines.push(contentLn + '\n')
     
 		let matchedLinks = contentLn.match(re_matchLinks)
-		if (matchedLinks == null)
+		if (matchedLinks === null)
 			continue
 
-		console.log('matched links: ' + matchedLinks)
+		console.log('Matched content image links: ' + matchedLinks)
 
 		let parsedContentLn = contentLn
-		for (const matchedlink of matchedLinks) {
+		for (const mLink of matchedLinks) {
 			//check if link to a web image
-			if (re_Url.test(matchedlink)) {
-				console.log('\nSkipping linked web image content: ' + matchedlink);
+			if (re_url.test(mLink)) {
+				console.log('\nSkipping linked web image content: ' + mLink);
 				continue
 			}
-			console.log('\nLinked image content found: ' + matchedlink);
+			//console.log('\nLinked image content found: ' + mLink);
 
-			let wikijsImagePath: string
-			const validImagePath = function (obsImgPath: string): boolean {
-				let obsImgFname = obsImgPath.split('/')[obsImgPath.split('/').length - 1]
-				let obsImgExt = obsImgFname.split('.')[obsImgFname.split('.').length - 1]
-				if (!VaultImageFileFormats.some(imgFmt => imgFmt === obsImgExt)) {
-					console.log('\nBad parsed image format: ' + obsImgFname)
-					return false
-				}
-				wikijsImagePath = createWikijsImageFilePath(obsImgPath, upImagesMetadata)
-				if (wikijsImagePath == "") {
-					wikijsImagePath = obsImgFname
-				}
-				return true
+			let obsImgFname = mLink.split('/')[mLink.split('/').length - 1]
+			let obsImgExt = obsImgFname.split('.')[obsImgFname.split('.').length - 1]
+			if (!VaultImageFileFormats.some(imgFmt => imgFmt === obsImgExt)) {
+				console.log('\nBad parsed image format: ' + obsImgFname)
+				continue
 			}
 
-			if (!validImagePath(matchedlink))
-				continue
-
-			const re_imgPathHyper = new RegExp("\\]\\(" + matchedlink + "\\)");
-			parsedContentLn = parsedContentLn.replace(re_imgPathHyper, "](/" + wikijsImagePath + ")")
-			const re_imgPathDir = new RegExp("\\[\\[" + matchedlink + "\\]\\]");
-			parsedContentLn = parsedContentLn.replace(re_imgPathDir, "[image](/" + wikijsImagePath + ")")
+			let wikijsImagePath = createWikijsImageFilePath(mLink, upImagesMetadata)
+			if (wikijsImagePath === "") 
+				wikijsImagePath = obsImgFname
+			
+			const re_imgPathHyper = new RegExp("\\]\\(" + mLink + "\\)");
+			parsedContentLn = parsedContentLn.replace(re_imgPathHyper, `](/${wikijsImagePath})`)
+			const re_imgPathDir = new RegExp("\\[\\[" + mLink + "\\]\\]");
+			parsedContentLn = parsedContentLn.replace(re_imgPathDir, `[${obsImgFname}](/${wikijsImagePath})`)
 		}
 
 	    //console.log('\nParsed linked image line: ' + parsedLine)
@@ -372,7 +296,6 @@ const parseContentLinkedImages = (noteContent: string, upImagesMetadata: VaultIm
 
 	return parsedContentLines.join("")
 }
-
 
 /**
  * Upload linked images in obsidian note to wikijs storage
