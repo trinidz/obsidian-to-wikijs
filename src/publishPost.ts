@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { SettingsProp, DataProp, VaultImageFileFormats, VaultImageFileMetadata } from "./types";
 import { MarkdownView, Notice, requestUrl, RequestUrlParam, Vault, getBlobArrayBuffer, TAbstractFile } from "obsidian";
-import { sha256 } from "./crypto"
+import { shortHash256 } from "./crypto"
 
 const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
@@ -127,7 +127,7 @@ export const publishPost = async (view: MarkdownView, vlt: Vault, settings: Sett
  * @private
  * @param {string} uuidTag uuid tag of an obsidian note
  * @param {string} settings app settings
- * @return {Promise<number>} wikijs note id of the obsidian note; returns -1 if not found
+ * @return {Promise<number>} wikijs note id; returns -1 if not found
  */
 const wikiPostExists = async (uuidTag: string, settings: SettingsProp): Promise<number> => {
 	let noteId: number = -1;
@@ -239,7 +239,7 @@ const parseContentCallouts = (noteContent: string): string => {
 }
 
 /**
- * Convert Obsidian linked image file paths to Wikijs storage file paths
+ * Convert linked image file paths to Wikijs storage file paths
  * 
  * @private
  * @param {string} noteContent Content of an obsidian note
@@ -298,7 +298,7 @@ const parseContentLinkedImages = (noteContent: string, upImagesMetadata: VaultIm
 }
 
 /**
- * Upload linked images in obsidian note to wikijs storage
+ * Upload linked images to wikijs storage
  * 
  * @private
  * @param {MarkdownView} view note markdown view
@@ -341,7 +341,7 @@ const uploadLinkedVaultImages = async (view: MarkdownView, vlt: Vault, settings:
 	// Now that we have all the images to upload, we can upload them
 	for (const imgToUpload of imagesToUpload) {
 		const imgToUploadArrBuffer = await vlt.adapter.readBinary(imgToUpload.path)
-		const imgToUploadSHA256 = await sha256(imgToUploadArrBuffer)
+		const imgToUploadSHA256 = await shortHash256(imgToUploadArrBuffer)
 		const imgToUploadWikijsFilename = imgToUploadSHA256 + '.' +  imgToUpload.name.split('.').pop()
 		//console.log('Uploading (' + imgToUploadWikijsFilename + ') ' + imgToUpload.path);
 

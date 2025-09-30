@@ -18,6 +18,6 @@ export async function sha1 (data: string | ArrayBuffer) {
   return sha('SHA-1', data)
 }
 
-export async function shortHash (text: string) {
-  return (await sha256(text)).slice(0, 32)
+export async function shortHash256 (data: string | ArrayBuffer) {
+  return (await sha256(data)).slice(0, 32)
 }

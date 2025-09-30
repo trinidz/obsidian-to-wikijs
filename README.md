@@ -11,7 +11,7 @@ Obsidian-to-Wikijs requires a valid Wikijs API key to enable sending Obsidian no
 
 Install the Obsidian-to-Wikijs plugin in Obsidian, then go settings and fill in the fields: 
 - Add the URL of your Wikijs instance to the "Wikijs URL" field (for example `https://wiki.mydomain.com or http://ip_address:port`). 
-- Add your Wikijs API key to the "API key" field. 
+- Add your Wikijs API key to the "API Key" field. 
 
 ### Front Matter
 
@@ -38,11 +38,11 @@ When you add the front matter to your Obsidian note the uuid should be automatic
 - To delete a note from your Wikijs instance, add the tag 'delete' to the tags field in the front matter, then click the upload icon in the ribbon menu. 
 
 ### Screenshots
-- example obsidian note
-![obsidian example screenshot](examples/obsidian-screenshot.png)
+- obsidian note
+![obsidian example screenshot](examples/o2w-obsidian-test.png)
 
-- example obsidian-to-wikijs post
-![wikijs example screenshot](examples/wikijs-screenshot.png)
+- obsidian-to-wikijs post
+![wikijs example screenshot](examples/o2w-wikijs-test.jpg)
 
 ## Development
 
