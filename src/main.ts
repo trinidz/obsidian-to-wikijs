@@ -1,8 +1,8 @@
 import { MarkdownFileInfo, MarkdownView, Notice, Plugin } from "obsidian";
 
-import { DEFAULT_SETTINGS, SettingsProp } from "./types/index";
-import { SettingTab } from "./settingTab";
-import { publishPost } from "./methods/publishPost";
+import { SettingsDefault, SettingsProp } from "./types";
+import { SettingTab } from "./settings";
+import { publishPost } from "./publishPost";
 export default class WikijsPublish extends Plugin {
 	settings: SettingsProp;
 
@@ -11,7 +11,7 @@ export default class WikijsPublish extends Plugin {
 		await this.loadSettings();
 
 		// 2 ways to publish:
-		// 1. Click on the ghost icon on the left
+		// 1. Click on the upload icon on the left
 		this.addRibbonIcon("upload", "Send To Wikijs", () => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!view) {
@@ -20,7 +20,7 @@ export default class WikijsPublish extends Plugin {
 				);
 				return;
 			}
-			publishPost(view, this.settings);
+			publishPost(view, this.app.vault, this.settings);
 		});
 
 		// 2. Run the by command + P
@@ -34,7 +34,7 @@ export default class WikijsPublish extends Plugin {
 					);
 					return;
 				}
-				publishPost(view, this.settings);
+				publishPost(view,this.app.vault, this.settings);
 			},
 
 			},
@@ -47,7 +47,7 @@ export default class WikijsPublish extends Plugin {
 	async loadSettings() {
 		this.settings = Object.assign(
 			{},
-			DEFAULT_SETTINGS,
+			SettingsDefault,
 			await this.loadData()
 		);
 	}

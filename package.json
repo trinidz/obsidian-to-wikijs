@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-wikijs-publish",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Obsidian plugin for easy publish to wikijs with a single click.",
 	"main": "src/main.ts",
 	"scripts": {
