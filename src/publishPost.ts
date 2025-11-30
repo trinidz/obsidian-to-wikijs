@@ -7,8 +7,8 @@ const matter = require("gray-matter");
 const UUID_TAG_HDR = "o2w-";
 
 export const publishPost = async (view: MarkdownView, vlt: Vault, settings: SettingsProp) => {
-	const regex_ipAddress = /^(https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-	const regex_url = /^(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/
+	const regex_ipAddress = /^(https?:\/\/)(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?::\d{1,5})?(?:\/[\w]*)*$/
+	const regex_url = /^(https?:\/\/)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}(?::\d{1,5})?(?:\/[\w]*)*$/
 	const regex_uuid = /^[a-zA-Z0-9]{7,32}$/
 	const noteFile = view.app.workspace.getActiveFile();
 	const metaMatter = view.app.metadataCache.getFileCache(noteFile).frontmatter;
